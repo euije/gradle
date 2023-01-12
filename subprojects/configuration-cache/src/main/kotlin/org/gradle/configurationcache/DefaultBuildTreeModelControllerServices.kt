@@ -19,12 +19,12 @@ package org.gradle.configurationcache
 import org.gradle.api.GradleException
 import org.gradle.api.internal.BuildType
 import org.gradle.api.internal.StartParameterInternal
-import org.gradle.api.internal.provider.ConfigurationTimeBarrier
-import org.gradle.api.internal.tasks.TaskExecutionAccessChecker
 import org.gradle.configurationcache.initialization.ConfigurationCacheInjectedClasspathInstrumentationStrategy
 import org.gradle.configurationcache.initialization.ConfigurationCacheStartParameter
+import org.gradle.configurationcache.initialization.DefaultConfigurationCacheProblemsListener
 import org.gradle.configurationcache.initialization.VintageInjectedClasspathInstrumentationStrategy
 import org.gradle.configurationcache.problems.ConfigurationCacheProblems
+import org.gradle.configurationcache.problems.DefaultProblemFactory
 import org.gradle.configurationcache.serialization.beans.BeanStateReaderLookup
 import org.gradle.configurationcache.serialization.beans.BeanStateWriterLookup
 import org.gradle.configurationcache.serialization.codecs.jos.JavaSerializationEncodingLookup
@@ -113,6 +113,8 @@ class DefaultBuildTreeModelControllerServices : BuildTreeModelControllerServices
             registration.add(ConfigurationCacheStartParameter::class.java)
             registration.add(ConfigurationCacheClassLoaderScopeRegistryListener::class.java)
             registration.add(ConfigurationCacheInjectedClasspathInstrumentationStrategy::class.java)
+            registration.add(DefaultConfigurationCacheProblemsListener::class.java)
+            registration.add(DefaultProblemFactory::class.java)
             registration.add(ConfigurationCacheProblems::class.java)
             registration.add(DefaultConfigurationCache::class.java)
             registration.add(BeanStateWriterLookup::class.java)
@@ -124,7 +126,6 @@ class DefaultBuildTreeModelControllerServices : BuildTreeModelControllerServices
             registration.add(VintageBuildTreeLifecycleControllerFactory::class.java)
             registration.addProvider(VintageBuildTreeProvider())
         }
-        registration.addProvider(TaskExecutionAccessCheckerProvider(modelParameters.isConfigurationCache))
     }
 
     private
@@ -138,21 +139,6 @@ class DefaultBuildTreeModelControllerServices : BuildTreeModelControllerServices
     class VintageBuildTreeProvider {
         fun createBuildTreeWorkGraphPreparer(buildRegistry: BuildStateRegistry, buildTaskSelector: BuildTaskSelector): BuildTreeWorkGraphPreparer {
             return DefaultBuildTreeWorkGraphPreparer(buildRegistry, buildTaskSelector)
-        }
-    }
-
-    private
-    class TaskExecutionAccessCheckerProvider(
-        private val isConfigurationCacheEnabled: Boolean
-    ) {
-        fun createTaskExecutionAccessChecker(
-            configurationTimeBarrier: ConfigurationTimeBarrier,
-            /** In non-CC builds, [ConfigurationCacheStartParameter] is not registered; accepting a list here is a way to ignore its absence. */
-            configurationCacheStartParameter: List<ConfigurationCacheStartParameter>
-        ): TaskExecutionAccessChecker = when {
-            !isConfigurationCacheEnabled -> TaskExecutionAccessCheckers.TaskStateBased
-            configurationCacheStartParameter.single().taskExecutionAccessPreStable -> TaskExecutionAccessCheckers.TaskStateBased
-            else -> TaskExecutionAccessCheckers.ConfigurationTimeBarrierBased(configurationTimeBarrier)
         }
     }
 }

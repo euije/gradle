@@ -49,8 +49,11 @@ import org.gradle.api.tasks.util.PatternSet
 import org.gradle.configurationcache.CoupledProjectsListener
 import org.gradle.configurationcache.InputTrackingState
 import org.gradle.configurationcache.UndeclaredBuildInputListener
+import org.gradle.configurationcache.extensions.fileSystemEntryType
 import org.gradle.configurationcache.extensions.uncheckedCast
+import org.gradle.configurationcache.extensions.uri
 import org.gradle.configurationcache.fingerprint.ConfigurationCacheFingerprint.InputFile
+import org.gradle.configurationcache.fingerprint.ConfigurationCacheFingerprint.InputFileSystemEntry
 import org.gradle.configurationcache.fingerprint.ConfigurationCacheFingerprint.ValueSource
 import org.gradle.configurationcache.problems.DocumentationSection
 import org.gradle.configurationcache.problems.PropertyProblem
@@ -60,6 +63,7 @@ import org.gradle.configurationcache.serialization.DefaultWriteContext
 import org.gradle.configurationcache.services.ConfigurationCacheEnvironment
 import org.gradle.configurationcache.services.EnvironmentChangeTracker
 import org.gradle.groovy.scripts.ScriptSource
+import org.gradle.groovy.scripts.internal.ScriptSourceListener
 import org.gradle.internal.buildoption.FeatureFlag
 import org.gradle.internal.buildoption.FeatureFlagListener
 import org.gradle.internal.concurrent.CompositeStoppable
@@ -75,6 +79,7 @@ import org.gradle.internal.scripts.ScriptExecutionListener
 import org.gradle.internal.scripts.ScriptFileResolvedListener
 import org.gradle.util.Path
 import java.io.File
+import java.net.URI
 import java.util.EnumSet
 
 
@@ -87,7 +92,7 @@ class ConfigurationCacheFingerprintWriter(
     private val directoryFileTreeFactory: DirectoryFileTreeFactory,
     private val taskExecutionTracker: TaskExecutionTracker,
     private val environmentChangeTracker: EnvironmentChangeTracker,
-    private val inputTrackingState: InputTrackingState
+    private val inputTrackingState: InputTrackingState,
 ) : ValueSourceProviderFactory.ValueListener,
     ValueSourceProviderFactory.ComputationListener,
     WorkInputListener,
@@ -100,6 +105,7 @@ class ConfigurationCacheFingerprintWriter(
     ScriptFileResolvedListener,
     FeatureFlagListener,
     FileCollectionObservationListener,
+    ScriptSourceListener,
     ConfigurationCacheEnvironment.Listener {
 
     interface Host {
@@ -108,8 +114,10 @@ class ConfigurationCacheFingerprintWriter(
         val startParameterProperties: Map<String, Any?>
         val buildStartTime: Long
         val cacheIntermediateModels: Boolean
+        val instrumentationAgentUsed: Boolean
         fun fingerprintOf(fileCollection: FileCollectionInternal): HashCode
-        fun hashCodeOf(file: File): HashCode?
+        fun hashCodeOf(file: File): HashCode
+        fun hashCodeOfDirectoryContent(file: File): HashCode
         fun displayNameOf(file: File): String
         fun reportInput(input: PropertyProblem)
         fun location(consumer: String?): PropertyTrace
@@ -149,6 +157,12 @@ class ConfigurationCacheFingerprintWriter(
     val reportedFiles = newConcurrentHashSet<File>()
 
     private
+    val reportedDirectories = newConcurrentHashSet<File>()
+
+    private
+    val reportedFileSystemEntries = newConcurrentHashSet<File>()
+
+    private
     val reportedValueSources = newConcurrentHashSet<String>()
 
     private
@@ -161,7 +175,8 @@ class ConfigurationCacheFingerprintWriter(
             ConfigurationCacheFingerprint.GradleEnvironment(
                 host.gradleUserHomeDir,
                 jvmFingerprint(),
-                host.startParameterProperties
+                host.startParameterProperties,
+                host.instrumentationAgentUsed
             )
         )
     }
@@ -179,6 +194,23 @@ class ConfigurationCacheFingerprintWriter(
         }
         CompositeStoppable.stoppable(buildScopedWriter, projectScopedWriter).stop()
     }
+
+    override fun scriptSourceObserved(scriptSource: ScriptSource) {
+        if (isInputTrackingDisabled()) {
+            return
+        }
+
+        scriptSource.uri?.takeIf { it.isHttp }?.let { uri ->
+            sink().captureRemoteScript(uri)
+        }
+    }
+
+    /**
+     * Returns `true` if [scheme][URI.scheme] starts with `http`.
+     */
+    private
+    val URI.isHttp: Boolean
+        get() = scheme.startsWith("http")
 
     override fun onDynamicVersionSelection(requested: ModuleComponentSelector, expiry: Expiry, versions: Set<ModuleVersionIdentifier>) {
         // Only consider repositories serving at least one version of the requested module.
@@ -219,6 +251,29 @@ class ConfigurationCacheFingerprintWriter(
         }
         // Ignore consumer for now, only used by Gradle internals and so shouldn't appear in the report.
         captureFile(file)
+    }
+
+    override fun directoryChildrenObserved(file: File) {
+        if (isInputTrackingDisabled()) {
+            return
+        }
+        sink().captureDirectoryChildren(file)
+    }
+
+    override fun directoryChildrenObserved(directory: File, consumer: String?) {
+        if (isInputTrackingDisabled() || isExecutingTask()) {
+            return
+        }
+        sink().captureDirectoryChildren(directory)
+        reportUniqueDirectoryChildrenInput(directory, consumer)
+    }
+
+    override fun fileSystemEntryObserved(file: File, consumer: String?) {
+        if (isInputTrackingDisabled() || isExecutingTask()) {
+            return
+        }
+        sink().captureFileSystemEntry(file)
+        reportUniqueFileSystemEntryInput(file, consumer)
     }
 
     override fun systemPropertyRead(key: String, value: Any?, consumer: String?) {
@@ -530,9 +585,39 @@ class ConfigurationCacheFingerprintWriter(
     }
 
     private
+    fun reportUniqueDirectoryChildrenInput(directory: File, consumer: String?) {
+        if (reportedDirectories.add(directory)) {
+            reportDirectoryContentInput(directory, consumer)
+        }
+    }
+
+    private
+    fun reportUniqueFileSystemEntryInput(file: File, consumer: String?) {
+        if (reportedFileSystemEntries.add(file)) {
+            reportFileSystemEntryInput(file, consumer)
+        }
+    }
+
+    private
     fun reportFileInput(file: File, consumer: String?) {
         reportInput(consumer, null) {
             text("file ")
+            reference(host.displayNameOf(file))
+        }
+    }
+
+    private
+    fun reportDirectoryContentInput(directory: File, consumer: String?) {
+        reportInput(consumer, null) {
+            text("directory content")
+            reference(host.displayNameOf(directory))
+        }
+    }
+
+    private
+    fun reportFileSystemEntryInput(file: File, consumer: String?) {
+        reportInput(consumer, null) {
+            text("file system entry")
             reference(host.displayNameOf(file))
         }
     }
@@ -637,6 +722,8 @@ class ConfigurationCacheFingerprintWriter(
         private val host: Host
     ) {
         val capturedFiles: MutableSet<File> = newConcurrentHashSet()
+        val capturedDirectories: MutableSet<File> = newConcurrentHashSet()
+        val capturedFileSystemEntries: MutableSet<File> = newConcurrentHashSet()
 
         private
         val undeclaredSystemProperties = newConcurrentHashSet<String>()
@@ -644,11 +731,34 @@ class ConfigurationCacheFingerprintWriter(
         private
         val undeclaredEnvironmentVariables = newConcurrentHashSet<String>()
 
+        private
+        val remoteScriptsUris = newConcurrentHashSet<URI>()
+
         fun captureFile(file: File) {
             if (!capturedFiles.add(file)) {
                 return
             }
             write(inputFile(file))
+        }
+
+        fun captureDirectoryChildren(file: File) {
+            if (!capturedDirectories.add(file)) {
+                return
+            }
+            write(ConfigurationCacheFingerprint.DirectoryChildren(file, host.hashCodeOfDirectoryContent(file)))
+        }
+
+        fun captureRemoteScript(uri: URI) {
+            if (remoteScriptsUris.add(uri)) {
+                write(ConfigurationCacheFingerprint.RemoteScript(uri))
+            }
+        }
+
+        fun captureFileSystemEntry(file: File) {
+            if (!capturedFileSystemEntries.add(file)) {
+                return
+            }
+            write(inputFileSystemEntry(file))
         }
 
         fun systemPropertyRead(key: String, value: Any?) {
@@ -670,6 +780,9 @@ class ConfigurationCacheFingerprintWriter(
                 file,
                 host.hashCodeOf(file)
             )
+
+        fun inputFileSystemEntry(file: File) =
+            InputFileSystemEntry(file, fileSystemEntryType(file))
     }
 
     private

@@ -80,12 +80,12 @@ import org.gradle.api.provider.ProviderFactory;
 import org.gradle.api.services.internal.BuildServiceProvider;
 import org.gradle.api.services.internal.BuildServiceProviderNagger;
 import org.gradle.api.services.internal.DefaultBuildServicesRegistry;
-import org.gradle.cache.CacheRepository;
+import org.gradle.cache.UnscopedCacheBuilderFactory;
 import org.gradle.cache.FileLockManager;
 import org.gradle.cache.internal.BuildScopeCacheDir;
-import org.gradle.cache.internal.scopes.DefaultBuildScopedCache;
-import org.gradle.cache.scopes.BuildScopedCache;
-import org.gradle.cache.scopes.GlobalScopedCache;
+import org.gradle.cache.internal.scopes.DefaultBuildScopedCacheBuilderFactory;
+import org.gradle.cache.scopes.BuildScopedCacheBuilderFactory;
+import org.gradle.cache.scopes.GlobalScopedCacheBuilderFactory;
 import org.gradle.caching.internal.BuildCacheServices;
 import org.gradle.configuration.BuildOperationFiringProjectsPreparer;
 import org.gradle.configuration.BuildTreePreparingProjectsPreparer;
@@ -118,6 +118,7 @@ import org.gradle.groovy.scripts.internal.CrossBuildInMemoryCachingScriptClassCa
 import org.gradle.groovy.scripts.internal.DefaultScriptCompilationHandler;
 import org.gradle.groovy.scripts.internal.DefaultScriptRunnerFactory;
 import org.gradle.groovy.scripts.internal.FileCacheBackedScriptClassCompiler;
+import org.gradle.groovy.scripts.internal.ScriptSourceListener;
 import org.gradle.groovy.scripts.internal.ScriptRunnerFactory;
 import org.gradle.initialization.BuildLoader;
 import org.gradle.initialization.BuildOperationFiringSettingsPreparer;
@@ -271,14 +272,14 @@ public class BuildScopeServices extends DefaultServiceRegistry {
         return new ExecutionNodeAccessHierarchies(fileSystem.isCaseSensitive() ? CaseSensitivity.CASE_SENSITIVE : CaseSensitivity.CASE_INSENSITIVE, stat);
     }
 
-    protected BuildScopedCache createBuildScopedCache(
+    protected BuildScopedCacheBuilderFactory createBuildScopedCacheBuilderFactory(
         GradleUserHomeDirProvider userHomeDirProvider,
         BuildLayout buildLayout,
         StartParameter startParameter,
-        CacheRepository cacheRepository
+        UnscopedCacheBuilderFactory unscopedCacheBuilderFactory
     ) {
         BuildScopeCacheDir cacheDir = new BuildScopeCacheDir(userHomeDirProvider, buildLayout, startParameter);
-        return new DefaultBuildScopedCache(cacheDir.getDir(), cacheRepository);
+        return new DefaultBuildScopedCacheBuilderFactory(cacheDir.getDir(), unscopedCacheBuilderFactory);
     }
 
     protected BuildLayout createBuildLayout(BuildLayoutFactory buildLayoutFactory, BuildDefinition buildDefinition) {
@@ -438,7 +439,7 @@ public class BuildScopeServices extends DefaultServiceRegistry {
 
     protected FileCacheBackedScriptClassCompiler createFileCacheBackedScriptClassCompiler(
         BuildOperationExecutor buildOperationExecutor,
-        GlobalScopedCache cacheRepository,
+        GlobalScopedCacheBuilderFactory cacheRepository,
         ClassLoaderHierarchyHasher classLoaderHierarchyHasher,
         DefaultScriptCompilationHandler scriptCompilationHandler,
         CachedClasspathTransformer classpathTransformer,
@@ -452,10 +453,10 @@ public class BuildScopeServices extends DefaultServiceRegistry {
             classpathTransformer);
     }
 
-    protected ScriptPluginFactory createScriptPluginFactory(InstantiatorFactory instantiatorFactory, BuildOperationExecutor buildOperationExecutor, UserCodeApplicationContext userCodeApplicationContext) {
+    protected ScriptPluginFactory createScriptPluginFactory(InstantiatorFactory instantiatorFactory, BuildOperationExecutor buildOperationExecutor, UserCodeApplicationContext userCodeApplicationContext, ListenerManager listenerManager) {
         DefaultScriptPluginFactory defaultScriptPluginFactory = defaultScriptPluginFactory();
         ScriptPluginFactorySelector.ProviderInstantiator instantiator = ScriptPluginFactorySelector.defaultProviderInstantiatorFor(instantiatorFactory.inject(this));
-        ScriptPluginFactorySelector scriptPluginFactorySelector = new ScriptPluginFactorySelector(defaultScriptPluginFactory, instantiator, buildOperationExecutor, userCodeApplicationContext);
+        ScriptPluginFactorySelector scriptPluginFactorySelector = new ScriptPluginFactorySelector(defaultScriptPluginFactory, instantiator, buildOperationExecutor, userCodeApplicationContext, listenerManager.getBroadcaster(ScriptSourceListener.class));
         defaultScriptPluginFactory.setScriptPluginFactory(scriptPluginFactorySelector);
         return scriptPluginFactorySelector;
     }

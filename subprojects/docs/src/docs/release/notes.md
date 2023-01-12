@@ -2,13 +2,17 @@ The Gradle team is excited to announce Gradle @version@.
 
 This release features [1](), [2](), ... [n](), and more.
 
-<!-- 
+<!--
 Include only their name, impactful features should be called out separately below.
  [Some person](https://github.com/some-person)
 
  THiS LIST SHOULD BE ALPHABETIZED BY [PERSON NAME] - the docs:updateContributorsInReleaseNotes task will enforce this ordering, which is case-insensitive.
 -->
 We would like to thank the following community members for their contributions to this release of Gradle:
+
+[Martin Bonnin](https://github.com/martinbonnin),
+[valery1707](https://github.com/valery1707),
+[Yanshun Li](https://github.com/Chaoba).
 
 ## Upgrade instructions
 
@@ -18,7 +22,7 @@ Switch your build to use Gradle @version@ by updating your wrapper:
 
 See the [Gradle 7.x upgrade guide](userguide/upgrading_version_7.html#changes_@baseVersion@) to learn about deprecations, breaking changes and other considerations when upgrading to Gradle @version@.
 
-For Java, Groovy, Kotlin and Android compatibility, see the [full compatibility notes](userguide/compatibility.html).   
+For Java, Groovy, Kotlin and Android compatibility, see the [full compatibility notes](userguide/compatibility.html).
 
 ## New features and usability improvements
 
@@ -26,9 +30,9 @@ For Java, Groovy, Kotlin and Android compatibility, see the [full compatibility 
 
 ### Gradle Wrapper
 
-#### Introduced labels for selecting the version 
+#### Introduced labels for selecting the version
 
-The [`--gradle-version`](userguide/gradle_wrapper.html#sec:adding_wrapper) parameter for the wrapper plugin 
+The [`--gradle-version`](userguide/gradle_wrapper.html#sec:adding_wrapper) parameter for the wrapper plugin
 now supports using predefined labels to select a version.
 
 The allowed labels are:
@@ -69,37 +73,13 @@ vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv -->
 
 TODO - Java lambdas are supported, and unsupported captured values are reported.
 TODO - File collections queried at configuration time are treated as configuration inputs.
+TODO - File system repositories are fully supported including dynamic versions in Maven, Maven local, and Ivy repositories
 
 <!-- ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 ADD RELEASE FEATURES ABOVE
 ==========================================================
 
 -->
-
-#### Improved Gradle User Home Cache Cleanup
-Previously, cleanup of the caches in Gradle User Home used fixed retention periods (30 days or 7 days depending on the cache).  
-These retention periods can now be configured via the [Settings](dsl/org.gradle.api.initialization.Settings.html) object in an init script in Gradle User Home.
-
-```groovy
-beforeSettings { settings ->
-    settings.caches {
-        downloadedResources.removeUnusedEntriesAfterDays = 45
-    }
-}
-```
-
-Furthermore, it was previously only possible to partially disable cache cleanup via the `org.gradle.cache.cleanup` Gradle property in Gradle User Home.  
-Disabling cache cleanup now affects more caches under Gradle User Home and can also be configured via the [Settings](dsl/org.gradle.api.initialization.Settings.html) object in an init script in Gradle User Home.
-
-```groovy
-beforeSettings { settings ->
-    settings.caches {
-        cleanup = Cleanup.DISABLED
-    }
-}
-```
-
-See [Configuring cleanup of caches and distributions](userguide/directory_layout.html#dir:gradle_user_home:configure_cache_cleanup) for more information.
 
 ## Promoted features
 Promoted features are features that were incubating in previous versions of Gradle but are now supported and subject to backwards compatibility.
