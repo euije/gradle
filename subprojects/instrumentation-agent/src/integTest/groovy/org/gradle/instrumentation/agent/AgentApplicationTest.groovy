@@ -23,7 +23,8 @@ import org.gradle.integtests.fixtures.daemon.DaemonsFixture
 import org.gradle.integtests.fixtures.executer.GradleContextualExecuter
 import org.gradle.internal.agents.AgentControl
 import org.gradle.launcher.daemon.configuration.DaemonBuildOptions
-import spock.lang.Requires
+import org.gradle.test.fixtures.IntegTestPreconditions
+import org.gradle.test.fixtures.condition.Requires
 
 class AgentApplicationTest extends AbstractIntegrationSpec {
     def "agent is disabled by default"() {
@@ -49,7 +50,10 @@ class AgentApplicationTest extends AbstractIntegrationSpec {
         agentWasNotApplied()
     }
 
-    @Requires(value = { GradleContextualExecuter.daemon }, reason = "Agent injection is not implemented for non-daemon and embedded modes")
+    @Requires(
+        value = IntegTestPreconditions.IsDaemonExecutor,
+        reason = "Agent injection is not implemented for non-daemon and embedded modes"
+    )
     def "agent is applied to the daemon process running the build"() {
         given:
         withAgent()
@@ -62,7 +66,10 @@ class AgentApplicationTest extends AbstractIntegrationSpec {
         agentWasApplied()
     }
 
-    @Requires(value = { (GradleContextualExecuter.daemon && GradleContextualExecuter.configCache) }, reason = "Agent injection is not implemented for non-daemon and embedded modes")
+    @Requires(
+        value = [IntegTestPreconditions.IsDaemonExecutor, IntegTestPreconditions.IsConfigCached],
+        reason = "Agent injection is not implemented for non-daemon and embedded modes"
+    )
     def "keeping agent status does not invalidate the configuration cache"() {
         def configurationCache = new ConfigurationCacheFixture(this)
         given:
