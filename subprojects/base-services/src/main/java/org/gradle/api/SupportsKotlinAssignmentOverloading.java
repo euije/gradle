@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 the original author or authors.
+ * Copyright 2017 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,11 +14,22 @@
  * limitations under the License.
  */
 
-package org.gradle.internal.component.local.model;
+package org.gradle.api;
 
-import org.gradle.api.internal.artifacts.dsl.dependencies.DependencyLockingState;
+import java.lang.annotation.Documented;
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.lang.annotation.Target;
 
-public interface RootConfigurationMetadata extends LocalConfigurationGraphResolveMetadata {
-
-    DependencyLockingState getDependencyLockingState();
+/**
+ * Marks interface that works with overloaded Kotlin assignment.
+ *
+ * @since 8.1
+ */
+@Incubating
+@Documented
+@Retention(RetentionPolicy.RUNTIME)
+@Target(ElementType.TYPE)
+public @interface SupportsKotlinAssignmentOverloading {
 }

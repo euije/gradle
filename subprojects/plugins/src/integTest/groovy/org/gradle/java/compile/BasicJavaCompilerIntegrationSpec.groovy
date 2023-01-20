@@ -22,6 +22,7 @@ import org.gradle.integtests.fixtures.AbstractIntegrationSpec
 import org.gradle.test.fixtures.IntegTestPreconditions
 import org.gradle.test.fixtures.condition.Requires
 import org.gradle.test.fixtures.condition.UnitTestPreconditions
+import org.gradle.internal.classanalysis.JavaClassUtil
 import org.gradle.test.fixtures.file.ClassFile
 
 abstract class BasicJavaCompilerIntegrationSpec extends AbstractIntegrationSpec {
@@ -611,12 +612,7 @@ class Main {
     }
 
     def bytecodeVersion() {
-        def classFile = javaClassFile('compile/test/Person.class').newDataInputStream()
-        classFile.readInt()
-        classFile.readUnsignedShort()
-        def majorVersion = classFile.readUnsignedShort()
-        classFile.close()
-        return majorVersion
+        return JavaClassUtil.getClassMajorVersion(javaClassFile('compile/test/Person.class'))
     }
 
 }
