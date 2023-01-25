@@ -20,7 +20,6 @@ import org.gradle.integtests.fixtures.AbstractIntegrationSpec
 import org.gradle.integtests.fixtures.configurationcache.ConfigurationCacheFixture
 import org.gradle.integtests.fixtures.daemon.DaemonLogsAnalyzer
 import org.gradle.integtests.fixtures.daemon.DaemonsFixture
-import org.gradle.integtests.fixtures.executer.GradleContextualExecuter
 import org.gradle.internal.agents.AgentControl
 import org.gradle.launcher.daemon.configuration.DaemonBuildOptions
 import org.gradle.test.fixtures.IntegTestPreconditions
@@ -94,7 +93,10 @@ class AgentApplicationTest extends AbstractIntegrationSpec {
         agentStatus << [true, false]
     }
 
-    @Requires(value = { (GradleContextualExecuter.daemon && GradleContextualExecuter.configCache) }, reason = "Agent injection is not implemented for non-daemon and embedded modes")
+    @Requires(
+        value = [IntegTestPreconditions.IsDaemonExecutor, IntegTestPreconditions.IsConfigCached],
+        reason = "Agent injection is not implemented for non-daemon and embedded modes"
+    )
     def "changing agent status invalidates the configuration cache"() {
         def configurationCache = new ConfigurationCacheFixture(this)
         given:
@@ -122,7 +124,7 @@ class AgentApplicationTest extends AbstractIntegrationSpec {
         false              | true
     }
 
-    @Requires(value = { GradleContextualExecuter.daemon }, reason = "Testing the daemons")
+    @Requires(value = IntegTestPreconditions.IsDaemonExecutor, reason = "Testing the daemons")
     def "daemon with the same agent status is reused"() {
         given:
         executer.requireIsolatedDaemons()
