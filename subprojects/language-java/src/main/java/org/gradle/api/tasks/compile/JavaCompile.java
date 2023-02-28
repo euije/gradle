@@ -63,6 +63,7 @@ import org.gradle.jvm.toolchain.JavaCompiler;
 import org.gradle.jvm.toolchain.JavaInstallationMetadata;
 import org.gradle.jvm.toolchain.JavaToolchainService;
 import org.gradle.jvm.toolchain.internal.DefaultToolchainJavaCompiler;
+import org.gradle.jvm.toolchain.internal.JavaExecutableUtils;
 import org.gradle.language.base.internal.compile.CompileSpec;
 import org.gradle.language.base.internal.compile.Compiler;
 import org.gradle.work.Incremental;
@@ -217,10 +218,9 @@ public abstract class JavaCompile extends AbstractCompile implements HasCompileO
         return previousCompilationDataFile;
     }
 
-    private WorkResult performCompilation(JavaCompileSpec spec, Compiler<JavaCompileSpec> compiler) {
+    private void performCompilation(JavaCompileSpec spec, Compiler<JavaCompileSpec> compiler) {
         WorkResult result = new CompileJavaBuildOperationReportingCompiler(this, compiler, getServices().get(BuildOperationExecutor.class)).execute(spec);
         setDidWork(result.getDidWork());
-        return result;
     }
 
     @VisibleForTesting
@@ -234,7 +234,6 @@ public abstract class JavaCompile extends AbstractCompile implements HasCompileO
         DefaultJavaCompileSpec spec = new DefaultJavaCompileSpecFactory(compileOptions, getToolchain()).create();
 
         spec.setDestinationDir(getDestinationDirectory().getAsFile().get());
-        spec.setOriginalDestinationDir(spec.getDestinationDir());
         spec.setWorkingDir(getProjectLayout().getProjectDirectory().getAsFile());
         spec.setTempDir(getTemporaryDir());
         spec.setCompileClasspath(ImmutableList.copyOf(javaModuleDetector.inferClasspath(isModule, getClasspath())));
@@ -269,10 +268,9 @@ public abstract class JavaCompile extends AbstractCompile implements HasCompileO
         );
 
         String customExecutablePath = forkOptions.getExecutable();
-        checkState(
-            customExecutablePath == null || new File(customExecutablePath).equals(toolchainExecutable),
-            "Toolchain from `executable` property on `ForkOptions` does not match toolchain from `javaCompiler` property"
-        );
+        JavaExecutableUtils.validateExecutable(
+                customExecutablePath, "Toolchain from `executable` property on `ForkOptions`",
+                toolchainExecutable, "toolchain from `javaCompiler` property");
     }
 
     private boolean isToolchainCompatibleWithJava8() {

@@ -17,7 +17,6 @@
 package org.gradle.kotlin.dsl.cache
 
 import org.gradle.api.internal.cache.StringInterner
-import org.gradle.cache.internal.CleanupActionDecorator
 import org.gradle.api.internal.cache.CacheConfigurationsInternal
 import org.gradle.cache.internal.InMemoryCacheDecoratorFactory
 import org.gradle.cache.scopes.GlobalScopedCacheBuilderFactory
@@ -28,13 +27,13 @@ import org.gradle.internal.hash.ClassLoaderHierarchyHasher
 import java.io.Closeable
 
 
+internal
 class KotlinDslWorkspaceProvider(
     cacheBuilderFactory: GlobalScopedCacheBuilderFactory,
     fileAccessTimeJournal: FileAccessTimeJournal,
     inMemoryCacheDecoratorFactory: InMemoryCacheDecoratorFactory,
     stringInterner: StringInterner,
     classLoaderHasher: ClassLoaderHierarchyHasher,
-    cleanupActionDecorator: CleanupActionDecorator,
     cacheConfigurations: CacheConfigurationsInternal
 ) : Closeable {
 
@@ -48,7 +47,6 @@ class KotlinDslWorkspaceProvider(
         stringInterner,
         classLoaderHasher,
         2, // scripts and accessors caches sit below the root directory
-        cleanupActionDecorator,
         cacheConfigurations
     )
 

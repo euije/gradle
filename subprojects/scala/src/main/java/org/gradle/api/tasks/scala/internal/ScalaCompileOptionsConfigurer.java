@@ -16,7 +16,6 @@
 
 package org.gradle.api.tasks.scala.internal;
 
-import com.google.common.collect.ImmutableList;
 import org.gradle.api.tasks.scala.ScalaCompileOptions;
 import org.gradle.jvm.toolchain.JavaInstallationMetadata;
 import org.gradle.jvm.toolchain.internal.JavaToolchain;
@@ -24,7 +23,6 @@ import org.gradle.util.internal.VersionNumber;
 
 import java.io.File;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 
@@ -69,27 +67,42 @@ public class ScalaCompileOptionsConfigurer {
             return;
         }
 
-        List<String> additionalParameters = scalaCompileOptions.getAdditionalParameters();
-        if (additionalParameters != null && hasTargetDefiningParameter(additionalParameters)) {
+        if (hasTargetDefiningParameter(scalaCompileOptions.getAdditionalParameters())) {
             return;
         }
 
         String targetParameter = determineTargetParameter(scalaVersion, (JavaToolchain) toolchain);
-        if (additionalParameters == null) {
-            scalaCompileOptions.setAdditionalParameters(Collections.singletonList(targetParameter));
-        } else {
-            scalaCompileOptions.setAdditionalParameters(new ImmutableList.Builder<String>().addAll(additionalParameters).add(targetParameter).build());
-        }
+        scalaCompileOptions.getAdditionalParameters().add(targetParameter);
     }
 
     private static boolean hasTargetDefiningParameter(List<String> additionalParameters) {
         return additionalParameters.stream().anyMatch(s -> TARGET_DEFINING_PARAMETERS.stream().anyMatch(s::startsWith));
     }
 
+    /**
+     * Computes parameter to specify how Scala should handle Java APIs and produced bytecode version.
+     * <p>
+     * The exact result depends on the Scala version in use and if the toolchain is user specified or not.
+     *
+     * @param scalaVersion The detected scala version
+     * @param javaToolchain The toolchain used to run compilation
+     * @return a Scala compiler parameter
+     */
     private static String determineTargetParameter(VersionNumber scalaVersion, JavaToolchain javaToolchain) {
-        int effectiveTarget = javaToolchain.isFallbackToolchain() ? FALLBACK_JVM_TARGET : javaToolchain.getLanguageVersion().asInt();
-        if (scalaVersion.compareTo(RELEASE_REPLACES_TARGET_SINCE_VERSION) >= 0) {
-            return String.format("-release:%s", effectiveTarget);
+        boolean explicitToolchain = !javaToolchain.isFallbackToolchain();
+        int effectiveTarget = !explicitToolchain ? FALLBACK_JVM_TARGET : javaToolchain.getLanguageVersion().asInt();
+        if (scalaVersion.compareTo(VersionNumber.parse("3.0.0")) >= 0) {
+            if (explicitToolchain) {
+                return String.format("-release:%s", effectiveTarget);
+            } else {
+                return String.format("-Xtarget:%s", effectiveTarget);
+            }
+        } else if (scalaVersion.compareTo(RELEASE_REPLACES_TARGET_SINCE_VERSION) >= 0) {
+            if (explicitToolchain) {
+                return String.format("-release:%s", effectiveTarget);
+            } else {
+                return String.format("-target:%s", effectiveTarget);
+            }
         } else if (scalaVersion.compareTo(PLAIN_TARGET_FORMAT_SINCE_VERSION) >= 0) {
             return String.format("-target:%s", effectiveTarget);
         } else {

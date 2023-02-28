@@ -30,7 +30,7 @@ import spock.lang.Issue
 
 import static org.hamcrest.CoreMatchers.startsWith
 
-@TargetCoverage({ CodeNarcCoverage.supportedVersionsByJdk })
+@TargetCoverage({ CodeNarcCoverage.supportedVersionsByCurrentJdk })
 @Requires(UnitTestPreconditions.StableGroovy)
 class CodeNarcPluginVersionIntegrationTest extends MultiVersionIntegrationSpec implements CodeNarcTestFixture {
     def setup() {

@@ -25,7 +25,7 @@ import org.gradle.test.fixtures.condition.UnitTestPreconditions
 import org.gradle.testing.fixture.GroovyCoverage
 import spock.lang.Issue
 
-@TargetCoverage({ CodeNarcCoverage.supportedVersionsByJdk })
+@TargetCoverage({ CodeNarcCoverage.supportedVersionsByCurrentJdk })
 @Requires(UnitTestPreconditions.StableGroovy)
 class CodeNarcNonJvmIntegrationTest extends MultiVersionIntegrationSpec implements CodeNarcTestFixture {
 

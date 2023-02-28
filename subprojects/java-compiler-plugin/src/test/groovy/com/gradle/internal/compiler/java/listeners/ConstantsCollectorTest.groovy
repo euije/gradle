@@ -41,6 +41,7 @@ class ConstantsCollectorTest extends AbstractCompilerPluginTest {
             Files.createTempDirectory(temporaryFolder.toPath(), null).toFile(),
             { f -> Optional.empty() },
             {},
+            {},
             consumer
         )
     }
