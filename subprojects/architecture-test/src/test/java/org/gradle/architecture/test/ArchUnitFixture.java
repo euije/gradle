@@ -37,11 +37,10 @@ import com.tngtech.archunit.lang.ArchRule;
 import com.tngtech.archunit.lang.ConditionEvents;
 import com.tngtech.archunit.lang.SimpleConditionEvent;
 import com.tngtech.archunit.library.freeze.FreezingArchRule;
-import org.gradle.test.fixtures.condition.Requires;
-import org.gradle.test.fixtures.condition.RequiresExtension;
-import org.gradle.test.fixtures.condition.RequiresNotExtension;
-import org.gradle.test.fixtures.condition.TestPrecondition;
-import org.gradle.test.fixtures.condition.UnitTestPreconditions;
+import org.gradle.test.precondition.Requires;
+import org.gradle.test.precondition.RequiresExtension;
+import org.gradle.test.precondition.TestPrecondition;
+import org.gradle.test.preconditions.UnitTestPreconditions;
 import org.gradle.util.EmptyStatement;
 import org.gradle.util.Matchers;
 import org.gradle.util.SetSystemProperties;
@@ -264,7 +263,6 @@ public interface ArchUnitFixture {
             UnitTestPreconditions.class,
 
             RequiresExtension.class,
-            RequiresNotExtension.class,
             UsesNativeServices.class,
             UsesNativeServicesExtension.class
         );

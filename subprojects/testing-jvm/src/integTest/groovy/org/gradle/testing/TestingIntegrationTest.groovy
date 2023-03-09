@@ -22,9 +22,9 @@ import org.gradle.integtests.fixtures.TargetCoverage
 import org.gradle.integtests.fixtures.executer.GradleContextualExecuter
 import org.gradle.integtests.fixtures.jvm.JavaToolchainFixture
 import org.gradle.internal.jvm.Jvm
+import org.gradle.test.precondition.Requires
+import org.gradle.test.preconditions.UnitTestPreconditions
 import org.gradle.testing.fixture.JUnitMultiVersionIntegrationSpec
-import org.gradle.test.fixtures.condition.Requires
-import org.gradle.test.fixtures.condition.UnitTestPreconditions
 import org.gradle.util.internal.TextUtil
 import org.hamcrest.CoreMatchers
 import spock.lang.IgnoreIf
@@ -34,6 +34,7 @@ import static org.gradle.testing.fixture.JUnitCoverage.getJUNIT_4_LATEST
 import static org.gradle.testing.fixture.JUnitCoverage.getJUNIT_VINTAGE_JUPITER
 import static org.gradle.testing.fixture.JUnitCoverage.getNEWEST
 import static org.hamcrest.CoreMatchers.equalTo
+
 /**
  * General tests for the JVM testing infrastructure that don't deserve their own test class.
  */

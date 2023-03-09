@@ -19,11 +19,11 @@ package org.gradle.java.compile
 
 import org.gradle.api.Action
 import org.gradle.integtests.fixtures.AbstractIntegrationSpec
-import org.gradle.test.fixtures.IntegTestPreconditions
-import org.gradle.test.fixtures.condition.Requires
-import org.gradle.test.fixtures.condition.UnitTestPreconditions
 import org.gradle.internal.classanalysis.JavaClassUtil
 import org.gradle.test.fixtures.file.ClassFile
+import org.gradle.test.precondition.Requires
+import org.gradle.test.preconditions.IntegTestPreconditions
+import org.gradle.test.preconditions.UnitTestPreconditions
 
 abstract class BasicJavaCompilerIntegrationSpec extends AbstractIntegrationSpec {
 

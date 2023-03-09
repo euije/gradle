@@ -21,6 +21,8 @@ import org.gradle.integtests.tooling.fixture.ProgressEvents
 import org.gradle.integtests.tooling.fixture.ToolingApiSpecification
 import org.gradle.integtests.tooling.fixture.WithOldConfigurationsSupport
 import org.gradle.test.fixtures.file.TestFile
+import org.gradle.test.precondition.Requires
+import org.gradle.test.preconditions.UnitTestPreconditions
 import org.gradle.tooling.ListenerFailedException
 import org.gradle.tooling.ProjectConnection
 import org.gradle.tooling.events.OperationType
@@ -33,8 +35,6 @@ import org.gradle.tooling.events.test.TestProgressEvent
 import org.gradle.tooling.events.test.TestSkippedResult
 import org.gradle.tooling.model.gradle.BuildInvocations
 import org.gradle.util.GradleVersion
-import org.gradle.test.fixtures.condition.Requires
-import org.gradle.test.fixtures.condition.UnitTestPreconditions
 
 class TestProgressCrossVersionSpec extends ToolingApiSpecification implements WithOldConfigurationsSupport {
     def "receive test progress events when requesting a model"() {
