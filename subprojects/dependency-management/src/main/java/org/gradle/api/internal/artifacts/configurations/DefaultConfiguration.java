@@ -118,9 +118,7 @@ import org.gradle.internal.component.external.model.ProjectDerivedCapability;
 import org.gradle.internal.component.local.model.LocalComponentMetadata;
 import org.gradle.internal.component.model.DependencyMetadata;
 import org.gradle.internal.component.model.LocalComponentDependencyMetadata;
-import org.gradle.internal.deprecation.DeprecatableConfiguration;
 import org.gradle.internal.deprecation.DeprecationLogger;
-import org.gradle.internal.deprecation.DeprecationMessageBuilder;
 import org.gradle.internal.deprecation.DocumentedFailure;
 import org.gradle.internal.event.ListenerBroadcast;
 import org.gradle.internal.lazy.Lazy;
@@ -145,6 +143,7 @@ import org.slf4j.LoggerFactory;
 
 import javax.annotation.Nullable;
 import java.io.File;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Iterator;
@@ -155,7 +154,6 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -238,9 +236,9 @@ public class DefaultConfiguration extends AbstractFileCollection implements Conf
     private boolean canBeConsumed;
     private boolean canBeResolved;
     private boolean canBeDeclaredAgainst;
-    private boolean consumptionDeprecated;
-    private boolean resolutionDeprecated;
-    private boolean declarationDeprecated;
+    private final boolean consumptionDeprecated;
+    private final boolean resolutionDeprecated;
+    private final boolean declarationDeprecated;
     private boolean usageCanBeMutated = true;
     private final ConfigurationRole roleAtCreation;
 
@@ -260,9 +258,8 @@ public class DefaultConfiguration extends AbstractFileCollection implements Conf
 
     private Action<? super ConfigurationInternal> beforeLocking;
 
-    private List<String> declarationAlternatives;
-    private DeprecationMessageBuilder.WithDocumentation consumptionDeprecation;
-    private List<String> resolutionAlternatives;
+    private List<String> declarationAlternatives = ImmutableList.of();
+    private List<String> resolutionAlternatives = ImmutableList.of();
 
     private final CalculatedModelValue<ResolveState> currentResolveState;
 
@@ -353,19 +350,9 @@ public class DefaultConfiguration extends AbstractFileCollection implements Conf
         this.canBeConsumed = roleAtCreation.isConsumable();
         this.canBeResolved = roleAtCreation.isResolvable();
         this.canBeDeclaredAgainst = roleAtCreation.isDeclarableAgainst();
-
-        // Calling these during construction is not ideal, but we'd have to call the deprecateForConsumption(), etc.
-        // methods anyway even if replicated the code inside these methods here, so at least this keeps a single
-        // code path for the deprecation.
-        if (roleAtCreation.isConsumptionDeprecated()) {
-            deprecateForConsumption();
-        }
-        if (roleAtCreation.isResolutionDeprecated()) {
-            deprecateForResolution();
-        }
-        if (roleAtCreation.isDeclarationAgainstDeprecated()) {
-            deprecateForDeclarationAgainst();
-        }
+        this.consumptionDeprecated = roleAtCreation.isConsumptionDeprecated();
+        this.resolutionDeprecated = roleAtCreation.isResolutionDeprecated();
+        this.declarationDeprecated = roleAtCreation.isDeclarationAgainstDeprecated();
 
         if (lockUsage) {
             preventUsageMutation();
@@ -658,7 +645,7 @@ public class DefaultConfiguration extends AbstractFileCollection implements Conf
 
     private ResolveState resolveToStateOrLater(final InternalState requestedState) {
         assertIsResolvable();
-        warnIfConfigurationIsDeprecatedForResolving();
+        maybeEmitResolutionDeprecation();
         logIfImproperConfiguration();
 
         ResolveState currentState = currentResolveState.get();
@@ -679,15 +666,6 @@ public class DefaultConfiguration extends AbstractFileCollection implements Conf
             }
         }
         return resolveExclusively(requestedState);
-    }
-
-    private void warnIfConfigurationIsDeprecatedForResolving() {
-        if (resolutionAlternatives != null) {
-            DeprecationLogger.deprecateConfiguration(this.name).forResolution().replaceWith(resolutionAlternatives)
-                    .willBecomeAnErrorInGradle9()
-                    .withUpgradeGuideSection(5, "dependencies_should_no_longer_be_declared_using_the_compile_and_runtime_configurations")
-                    .nagUser();
-        }
     }
 
     private ResolveState resolveExclusively(InternalState requestedState) {
@@ -1300,9 +1278,9 @@ public class DefaultConfiguration extends AbstractFileCollection implements Conf
      */
     private DefaultConfiguration createCopy(Set<Dependency> dependencies, Set<DependencyConstraint> dependencyConstraints) {
         // Begin by allowing everything, and setting deprecations for disallowed roles in a new role implementation
-        boolean deprecateConsumption = !canBeConsumed || consumptionDeprecation != null;
-        boolean deprecateResolution = !canBeResolved || resolutionAlternatives != null;
-        boolean deprecateDeclarationAgainst = !canBeDeclaredAgainst || declarationAlternatives != null;
+        boolean deprecateConsumption = !canBeConsumed || consumptionDeprecated;
+        boolean deprecateResolution = !canBeResolved || resolutionDeprecated;
+        boolean deprecateDeclarationAgainst = !canBeDeclaredAgainst || declarationDeprecated;
         ConfigurationRole adjustedCurrentUsage = new CopiedConfigurationRole(deprecateConsumption, deprecateResolution, deprecateDeclarationAgainst);
 
         DefaultConfiguration copiedConfiguration = newConfiguration(adjustedCurrentUsage, this.usageCanBeMutated);
@@ -1317,14 +1295,8 @@ public class DefaultConfiguration extends AbstractFileCollection implements Conf
         copiedConfiguration.withDependencyActions = withDependencyActions;
         copiedConfiguration.dependencyResolutionListeners = dependencyResolutionListeners.copy();
 
-        copiedConfiguration.declarationAlternatives =
-            canBeDeclaredAgainst || declarationAlternatives != null ? declarationAlternatives : Collections.emptyList();
-        copiedConfiguration.resolutionAlternatives =
-            canBeResolved || resolutionAlternatives != null ? resolutionAlternatives : Collections.emptyList();
-        copiedConfiguration.consumptionDeprecation =
-            canBeConsumed || consumptionDeprecation != null ? consumptionDeprecation
-                : DeprecationLogger.deprecateConfiguration(name).forConsumption()
-                    .willBecomeAnErrorInGradle9().undocumented();
+        copiedConfiguration.declarationAlternatives = declarationAlternatives;
+        copiedConfiguration.resolutionAlternatives = resolutionAlternatives;
 
         copiedConfiguration.getArtifacts().addAll(getAllArtifacts());
 
@@ -1796,7 +1768,7 @@ public class DefaultConfiguration extends AbstractFileCollection implements Conf
         if (!isSpecialCaseOfChangingUsage(usage, current)) {
             String msgTemplate = "Allowed usage is changing for %s, %s. Ideally, usage should be fixed upon creation.";
             String changingUsage = usage + " was " + !current + " and is now " + current;
-            
+
             DeprecationLogger.deprecateBehaviour(String.format(msgTemplate, getDisplayName(), changingUsage))
                     .withAdvice("Usage should be fixed upon creation.")
                     .willBeRemovedInGradle9()
@@ -1826,7 +1798,7 @@ public class DefaultConfiguration extends AbstractFileCollection implements Conf
      * <ol>
      *     <li>While {#roleAtCreation} is {@code null}, we are still initializing, so we should NOT warn.</li>
      *     <li>Changes to the usage of the detached configurations should NOT warn (this done by the Kotlin plugin).</li>
-     *     <li>Configurations with a legacy role should NOT warn when changing usage, 
+     *     <li>Configurations with a legacy role should NOT warn when changing usage,
 since users cannot create non-legacy configurations and there is no current public API for setting roles upon creation</li>
      *     <li>Setting consumable usage to false on the {@code apiElements} and {@code runtimeElements} configurations should NOT warn (this is done by the Kotlin plugin).</li>
      *     <li>All other usage changes should warn.</li>
@@ -1978,47 +1950,24 @@ since users cannot create non-legacy configurations and there is no current publ
 
     @Nullable
     @Override
-    public DeprecationMessageBuilder.WithDocumentation getConsumptionDeprecation() {
-        return consumptionDeprecation;
-    }
-
-    @Nullable
-    @Override
     public List<String> getResolutionAlternatives() {
         return resolutionAlternatives;
     }
 
     @Override
-    public DeprecatableConfiguration deprecateForDeclarationAgainst(String... alternativesForDeclaring) {
-        validateMutation(MutationType.USAGE);
-        this.declarationAlternatives = ImmutableList.copyOf(alternativesForDeclaring);
-        if (!declarationDeprecated) {
-            maybeWarnOnChangingUsage("deprecated for declaration against", true);
-        }
-        declarationDeprecated = true;
-        return this;
+    public void addDeclarationAlternatives(String... alternativesForDeclaring) {
+        this.declarationAlternatives = ImmutableList.<String>builder()
+            .addAll(declarationAlternatives)
+            .addAll(Arrays.asList(alternativesForDeclaring))
+            .build();
     }
 
     @Override
-    public DeprecatableConfiguration deprecateForResolution(String... alternativesForResolving) {
-        validateMutation(MutationType.USAGE);
-        this.resolutionAlternatives = ImmutableList.copyOf(alternativesForResolving);
-        if (!consumptionDeprecated) {
-            maybeWarnOnChangingUsage("deprecated for resolution", true);
-        }
-        resolutionDeprecated = true;
-        return this;
-    }
-
-    @Override
-    public DeprecatableConfiguration deprecateForConsumption(Function<DeprecationMessageBuilder.DeprecateConfiguration, DeprecationMessageBuilder.WithDocumentation> deprecation) {
-        validateMutation(MutationType.USAGE);
-        this.consumptionDeprecation = deprecation.apply(DeprecationLogger.deprecateConfiguration(name).forConsumption());
-        if (!consumptionDeprecated) {
-            maybeWarnOnChangingUsage("deprecated for consumption", true);
-        }
-        consumptionDeprecated = true;
-        return this;
+    public void addResolutionAlternatives(String... alternativesForResolving) {
+        this.resolutionAlternatives = ImmutableList.<String>builder()
+            .addAll(resolutionAlternatives)
+            .addAll(Arrays.asList(alternativesForResolving))
+            .build();
     }
 
     @Override
