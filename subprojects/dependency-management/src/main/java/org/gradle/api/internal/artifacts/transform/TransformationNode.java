@@ -42,7 +42,6 @@ import org.gradle.internal.operations.BuildOperationDescriptor;
 import org.gradle.internal.operations.BuildOperationExecutor;
 import org.gradle.internal.operations.CallableBuildOperation;
 import org.gradle.internal.scan.UsedByScanPlugin;
-import org.gradle.operations.dependencies.configurations.ConfigurationIdentity;
 import org.gradle.operations.dependencies.transforms.ExecutePlannedTransformStepBuildOperationType;
 import org.gradle.operations.dependencies.transforms.PlannedTransformStepIdentity;
 import org.gradle.operations.dependencies.variants.Capability;
@@ -54,12 +53,9 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
 public abstract class TransformationNode extends CreationOrderedNode implements SelfExecutingNode {
-
-    private static final AtomicLong SEQUENCE = new AtomicLong();
 
     protected final TransformationStep transformationStep;
     protected final ResolvableArtifact artifact;
@@ -70,35 +66,8 @@ public abstract class TransformationNode extends CreationOrderedNode implements 
 
     private PlannedTransformStepIdentity cachedIdentity;
 
-    public static ChainedTransformationNode chained(
-        ComponentVariantIdentifier targetComponentVariant,
-        AttributeContainer sourceAttributes,
-        TransformationStep current,
-        TransformationNode previous,
-        TransformUpstreamDependencies upstreamDependencies,
-        BuildOperationExecutor buildOperationExecutor,
-        CalculatedValueContainerFactory calculatedValueContainerFactory
-    ) {
-        return new ChainedTransformationNode(targetComponentVariant, sourceAttributes, current, previous, upstreamDependencies, buildOperationExecutor, calculatedValueContainerFactory);
-    }
-
-    public static InitialTransformationNode initial(
-        ComponentVariantIdentifier targetComponentVariant,
-        AttributeContainer sourceAttributes,
-        TransformationStep initial,
-        ResolvableArtifact artifact,
-        TransformUpstreamDependencies upstreamDependencies,
-        BuildOperationExecutor buildOperationExecutor,
-        CalculatedValueContainerFactory calculatedValueContainerFactory
-    ) {
-        return new InitialTransformationNode(targetComponentVariant, sourceAttributes, initial, artifact, upstreamDependencies, buildOperationExecutor, calculatedValueContainerFactory);
-    }
-
-    private static long createId() {
-        return SEQUENCE.incrementAndGet();
-    }
-
     protected TransformationNode(
+        long id,
         ComponentVariantIdentifier targetComponentVariant,
         AttributeContainer sourceAttributes,
         TransformationStep transformationStep,
@@ -110,7 +79,11 @@ public abstract class TransformationNode extends CreationOrderedNode implements 
         this.transformationStep = transformationStep;
         this.artifact = artifact;
         this.upstreamDependencies = upstreamDependencies;
-        this.transformationNodeId = createId();
+        this.transformationNodeId = id;
+    }
+
+    public long getTransformationNodeId() {
+        return transformationNodeId;
     }
 
     public ComponentVariantIdentifier getTargetComponentVariant() {
@@ -130,7 +103,7 @@ public abstract class TransformationNode extends CreationOrderedNode implements 
 
     private PlannedTransformStepIdentity createIdentity() {
         String consumerBuildPath = transformationStep.getOwningProject().getBuildPath().toString();
-        String consumerProjectPath = transformationStep.getOwningProject().getIdentityPath().toString();
+        String consumerProjectPath = transformationStep.getOwningProject().getProjectPath().toString();
         ComponentIdentifier componentId = getComponentIdentifier(targetComponentVariant.getComponentId());
         Map<String, String> sourceAttributes = AttributesToMapConverter.convertToMap(this.sourceAttributes);
         Map<String, String> targetAttributes = AttributesToMapConverter.convertToMap(targetComponentVariant.getAttributes());
@@ -138,62 +111,17 @@ public abstract class TransformationNode extends CreationOrderedNode implements 
             .map(TransformationNode::convertCapability)
             .collect(Collectors.toList());
 
-        return new PlannedTransformStepIdentity() {
-            @Override
-            public NodeType getNodeType() {
-                return NodeType.TRANSFORM_STEP;
-            }
-
-            @Override
-            public String getConsumerBuildPath() {
-                return consumerBuildPath;
-            }
-
-            @Override
-            public String getConsumerProjectPath() {
-                return consumerProjectPath;
-            }
-
-            @Override
-            public ComponentIdentifier getComponentId() {
-                return componentId;
-            }
-
-            @Override
-            public Map<String, String> getSourceAttributes() {
-                return sourceAttributes;
-            }
-
-            @Override
-            public Map<String, String> getTargetAttributes() {
-                return targetAttributes;
-            }
-
-            @Override
-            public List<? extends Capability> getCapabilities() {
-                return capabilities;
-            }
-
-            @Override
-            public String getArtifactName() {
-                return artifact.getArtifactName().toString();
-            }
-
-            @Override
-            public ConfigurationIdentity getDependenciesConfigurationIdentity() {
-                return upstreamDependencies.getConfigurationIdentity();
-            }
-
-            @Override
-            public long getTransformStepNodeId() {
-                return transformationNodeId;
-            }
-
-            @Override
-            public String toString() {
-                return "Transform '" + targetComponentVariant.getComponentId() + "' with " + transformationStep.getTransformer().getImplementationClass().getName();
-            }
-        };
+        return new DefaultPlannedTransformStepIdentity(
+            consumerBuildPath,
+            consumerProjectPath,
+            componentId,
+            sourceAttributes,
+            targetAttributes,
+            capabilities,
+            artifact.getArtifactName().toString(),
+            upstreamDependencies.getConfigurationIdentity(),
+            transformationNodeId
+        );
     }
 
     private static Capability convertCapability(org.gradle.api.capabilities.Capability capability) {
@@ -226,7 +154,9 @@ public abstract class TransformationNode extends CreationOrderedNode implements 
             return new org.gradle.operations.dependencies.variants.ProjectComponentIdentifier() {
                 @Override
                 public String getBuildPath() {
-                    return projectComponentIdentifier.getBuild().getName();
+                    // TODO: this should use a proper build path once it is available on BuildIdentifier
+                    String buildName = projectComponentIdentifier.getBuild().getName();
+                    return buildName.startsWith(":") ? buildName : (":" + buildName);
                 }
 
                 @Override
@@ -347,6 +277,7 @@ public abstract class TransformationNode extends CreationOrderedNode implements 
         private final CalculatedValueContainer<TransformationSubject, TransformInitialArtifact> result;
 
         public InitialTransformationNode(
+            long id,
             ComponentVariantIdentifier targetComponentVariant,
             AttributeContainer sourceAttributes,
             TransformationStep transformationStep,
@@ -355,7 +286,7 @@ public abstract class TransformationNode extends CreationOrderedNode implements 
             BuildOperationExecutor buildOperationExecutor,
             CalculatedValueContainerFactory calculatedValueContainerFactory
         ) {
-            super(targetComponentVariant, sourceAttributes, transformationStep, artifact, upstreamDependencies);
+            super(id, targetComponentVariant, sourceAttributes, transformationStep, artifact, upstreamDependencies);
             result = calculatedValueContainerFactory.create(Describables.of(this), new TransformInitialArtifact(buildOperationExecutor));
         }
 
@@ -412,6 +343,7 @@ public abstract class TransformationNode extends CreationOrderedNode implements 
         private final CalculatedValueContainer<TransformationSubject, TransformPreviousArtifacts> result;
 
         public ChainedTransformationNode(
+            long id,
             ComponentVariantIdentifier targetComponentVariant,
             AttributeContainer sourceAttributes,
             TransformationStep transformationStep,
@@ -420,7 +352,7 @@ public abstract class TransformationNode extends CreationOrderedNode implements 
             BuildOperationExecutor buildOperationExecutor,
             CalculatedValueContainerFactory calculatedValueContainerFactory
         ) {
-            super(targetComponentVariant, sourceAttributes, transformationStep, previousTransformationNode.artifact, upstreamDependencies);
+            super(id, targetComponentVariant, sourceAttributes, transformationStep, previousTransformationNode.artifact, upstreamDependencies);
             this.previousTransformationNode = previousTransformationNode;
             result = calculatedValueContainerFactory.create(Describables.of(this), new TransformPreviousArtifacts(buildOperationExecutor));
         }

@@ -89,6 +89,7 @@ import java.util.stream.Collectors;
 
 import static java.util.stream.Collectors.joining;
 import static org.gradle.api.internal.artifacts.BaseRepositoryFactory.PLUGIN_PORTAL_OVERRIDE_URL_PROPERTY;
+import static org.gradle.caching.internal.controller.NextGenBuildCacheController.NEXT_GEN_CACHE_SYSTEM_PROPERTY;
 import static org.gradle.integtests.fixtures.RepoScriptBlockUtil.gradlePluginRepositoryMirrorUrl;
 import static org.gradle.integtests.fixtures.executer.AbstractGradleExecuter.CliDaemonArgument.DAEMON;
 import static org.gradle.integtests.fixtures.executer.AbstractGradleExecuter.CliDaemonArgument.FOREGROUND;
@@ -1074,8 +1075,8 @@ public abstract class AbstractGradleExecuter implements GradleExecuter, Resettab
         }
 
         boolean hasAgentArgument = args.stream().anyMatch(s -> s.contains(DaemonBuildOptions.ApplyInstrumentationAgentOption.GRADLE_PROPERTY));
-        if (!hasAgentArgument && isAgentInstrumentationEnabled()) {
-            allArgs.add("-D" + DaemonBuildOptions.ApplyInstrumentationAgentOption.GRADLE_PROPERTY + "=true");
+        if (!hasAgentArgument && !isAgentInstrumentationEnabled()) {
+            allArgs.add("-D" + DaemonBuildOptions.ApplyInstrumentationAgentOption.GRADLE_PROPERTY + "=false");
         }
 
         allArgs.addAll(args);
@@ -1289,6 +1290,11 @@ public abstract class AbstractGradleExecuter implements GradleExecuter, Resettab
     @Override
     public GradleExecuter withBuildCacheEnabled() {
         return withArgument("--build-cache");
+    }
+
+    @Override
+    public GradleExecuter withBuildCacheNgEnabled() {
+        return withArguments("--build-cache", "-D" + NEXT_GEN_CACHE_SYSTEM_PROPERTY + "=true");
     }
 
     protected Action<ExecutionResult> getResultAssertion() {

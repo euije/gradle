@@ -89,7 +89,6 @@ import org.gradle.api.internal.attributes.AttributeContainerInternal;
 import org.gradle.api.internal.attributes.ImmutableAttributeContainerWithErrorMessage;
 import org.gradle.api.internal.attributes.ImmutableAttributes;
 import org.gradle.api.internal.attributes.ImmutableAttributesFactory;
-import org.gradle.api.internal.attributes.IncubatingAttributesChecker;
 import org.gradle.api.internal.collections.DomainObjectCollectionFactory;
 import org.gradle.api.internal.file.AbstractFileCollection;
 import org.gradle.api.internal.file.FileCollectionFactory;
@@ -549,8 +548,15 @@ public class DefaultConfiguration extends AbstractFileCollection implements Conf
         }
     }
 
+    @Deprecated
     @Override
     public Set<Configuration> getAll() {
+        DeprecationLogger.deprecateAction("Calling the Configuration.getAll() method")
+                .withAdvice("Use the configurations container to access the set of configurations instead.")
+                .willBeRemovedInGradle9()
+                .withUpgradeGuideSection(8, "deprecated_configuration_get_all")
+                .nagUser();
+
         return ImmutableSet.copyOf(configurationsProvider.getAll());
     }
 
@@ -1258,11 +1264,6 @@ public class DefaultConfiguration extends AbstractFileCollection implements Conf
     }
 
     @Override
-    public boolean isIncubating() {
-        return IncubatingAttributesChecker.isAnyIncubating(getAttributes());
-    }
-
-    @Override
     public void outgoing(Action<? super ConfigurationPublications> action) {
         action.execute(outgoing);
     }
@@ -1293,15 +1294,16 @@ public class DefaultConfiguration extends AbstractFileCollection implements Conf
      * deprecated in the copied configuration. In 9.0, we will update this to copy
      * roles and deprecations without modification. Or, better yet, we will remove support
      * for copying configurations altogether.
+     *
+     * This means the copy created is <strong>NOT</strong> a strictly identical copy of the original, as the role
+     * will be not only a different instance, but also may return different deprecation values.
      */
     private DefaultConfiguration createCopy(Set<Dependency> dependencies, Set<DependencyConstraint> dependencyConstraints) {
-        // Begin by allowing everything, and setting deprecations for disallowed roles
-        ConfigurationRole adjustedCurrentUsage = ConfigurationRole.forUsage(
-                true, true, true,
-                !canBeConsumed || consumptionDeprecation != null,
-                !canBeResolved || resolutionAlternatives != null,
-                !canBeDeclaredAgainst || declarationAlternatives != null);
-
+        // Begin by allowing everything, and setting deprecations for disallowed roles in a new role implementation
+        boolean deprecateConsumption = !canBeConsumed || consumptionDeprecation != null;
+        boolean deprecateResolution = !canBeResolved || resolutionAlternatives != null;
+        boolean deprecateDeclarationAgainst = !canBeDeclaredAgainst || declarationAlternatives != null;
+        ConfigurationRole adjustedCurrentUsage = new CopiedConfigurationRole(deprecateConsumption, deprecateResolution, deprecateDeclarationAgainst);
 
         DefaultConfiguration copiedConfiguration = newConfiguration(adjustedCurrentUsage, this.usageCanBeMutated);
         // state, cachedResolvedConfiguration, and extendsFrom intentionally not copied - must re-resolve copy
@@ -1730,20 +1732,26 @@ public class DefaultConfiguration extends AbstractFileCollection implements Conf
 
     /**
      * Check that the combination of consumable, resolvable and declarable flags is sensible.
-     * This method should be called only after all mutations are known to be complete.
-     * This shouldn't do anything stronger than log to info, otherwise it will interrupt dependency reports.
-     * Many improper configurations are still in use, we can't just fail if one is detected here.
+     * <p>
+     * This should only check configurations <strong>not</strong> created in the {@link ConfigurationRoles#LEGACY} role.
+     * <p>
+     * This method should be called only after all mutations are known to be complete.  This shouldn't do
+     * anything stronger than log to info, otherwise it will interrupt dependency reports. Many improper
+     * configurations are still in use, we can't just fail if one is detected here.
      */
+    @SuppressWarnings("deprecation")
     private void logIfImproperConfiguration() {
-        if (canBeConsumed && canBeResolved) {
-            LOGGER.info("The configuration " + identityPath.toString() + " is both resolvable and consumable. This is considered a legacy configuration and it will eventually only be possible to be one of these.");
-        }
+        if (roleAtCreation != ConfigurationRoles.LEGACY) {
+            if (canBeConsumed && canBeResolved) {
+                LOGGER.info("The configuration " + identityPath.toString() + " is both resolvable and consumable. This is considered a legacy configuration and it will eventually only be possible to be one of these.");
+            }
 
-        if (canBeConsumed && canBeDeclaredAgainst) {
-            LOGGER.info("The configuration " + identityPath.toString() + " is both consumable and declarable. This combination is incorrect, only one of these flags should be set.");
-        }
+            if (canBeConsumed && canBeDeclaredAgainst) {
+                LOGGER.info("The configuration " + identityPath.toString() + " is both consumable and declarable. This combination is incorrect, only one of these flags should be set.");
+            }
 
-        // canBeDeclared && canBeResolved is a valid and expected combination
+            // canBeDeclared && canBeResolved is a valid and expected combination
+        }
     }
 
     @Override
@@ -1765,11 +1773,6 @@ public class DefaultConfiguration extends AbstractFileCollection implements Conf
     @Override
     public void preventUsageMutation() {
         usageCanBeMutated = false;
-    }
-
-    @VisibleForTesting
-    public boolean isUsageMutable() {
-        return usageCanBeMutated;
     }
 
     @SuppressWarnings("deprecation")
@@ -1802,6 +1805,17 @@ public class DefaultConfiguration extends AbstractFileCollection implements Conf
         }
     }
 
+    private void maybeWarnOnRedundantUsageActivation(String usage, String method) {
+        if (!isSpecialCaseOfRedundantUsageActivation()) {
+            String msgTemplate = "The %s usage is already allowed on %s.";
+            DeprecationLogger.deprecateBehaviour(String.format(msgTemplate, usage, getDisplayName()))
+                    .withAdvice(String.format("Remove the call to %s, it has no effect.", method))
+                    .willBeRemovedInGradle9()
+                    .withUpgradeGuideSection(8, "redundant_configuration_usage_activation")
+                    .nagUser();
+        }
+    }
+
     /**
      * This is a temporary method that decides if a usage change is a known/supported special case, where a deprecation warning message
      * should not be emitted.
@@ -1817,21 +1831,75 @@ since users cannot create non-legacy configurations and there is no current publ
      *     <li>Setting consumable usage to false on the {@code apiElements} and {@code runtimeElements} configurations should NOT warn (this is done by the Kotlin plugin).</li>
      *     <li>All other usage changes should warn.</li>
      * </ol>
+     *
+     * @param usage the name usage that is being changed
+     * @param current the current value of the usage after the change
+     *
+     * @return {@code true} if the usage change is a known special case; {@code false} otherwise
+     */
+    private boolean isSpecialCaseOfChangingUsage(String usage, boolean current) {
+        return isInitializing() || isDetachedConfiguration() || isInLegacyRole() || isPermittedConfigurationForUsageChange(usage, current);
+    }
+
+    /**
+     * This is a temporary method that decides if a redundant usage activation is a known/supported special case,
+     * where a deprecation warning message should not be emitted.
+     * <p>
+     * These exceptions are needed to avoid spamming deprecations warnings whenever some important 3rd party plugins like
+     * Kotlin or Android are used.
+     * <p>
+     * <ol>
+     *     <li>Redundant activation of a usage of a detached configurations should NOT warn (this done by the Kotlin plugin).</li>
+     *     <li>Configurations with a legacy role should NOT warn during redundant usage activation,
+     since users cannot create non-legacy configurations and there is no current public API for setting roles upon creation</li>
+     *     <li>All other usage changes should warn.</li>
+     * </ol>
+     *
+     * @return {@code true} if the usage change is a known special case; {@code false} otherwise
+     */
+    private boolean isSpecialCaseOfRedundantUsageActivation() {
+        return isInLegacyRole() || isDetachedConfiguration() || isPermittedConfigurationForRedundantActivation();
+    }
+
+    private boolean isInitializing() {
+        return roleAtCreation == null;
+    }
+
+    private boolean isDetachedConfiguration() {
+        return this.configurationsProvider instanceof DetachedConfigurationsProvider;
+    }
+
+    @SuppressWarnings("deprecation")
+    private boolean isInLegacyRole() {
+        return roleAtCreation == ConfigurationRoles.LEGACY;
+    }
+
+    /**
+     * Determine if this is a configuration that is permitted to change its usage, to support important 3rd party
+     * plugins such as Kotlin that do this.
      * <p>
      * This method is temporary, so the duplication of the configuration names defined in
      * {@link JvmConstants}, which are not available to be referenced directly from here, is unfortunate, but not a showstopper.
      *
-     * @param usage the name usage that is being changed
-     * @param current the current value of the usage after the change
+     * @return {@code true} if this is a configuration that is permitted to change its usage; {@code false} otherwise
      */
-    @SuppressWarnings({"JavadocReference", "deprecation"})
-    private boolean isSpecialCaseOfChangingUsage(String usage, boolean current) {
-        boolean isInitializing = roleAtCreation == null;
-        boolean isDetachedConfiguration = this.configurationsProvider instanceof DetachedConfigurationsProvider;
-        boolean isLegacyRole = roleAtCreation == ConfigurationRoles.LEGACY;
-        boolean isPermittedConfigurationChangeForKotlin = name.equals("apiElements") || name.equals("runtimeElements") && usage.equals("consumable") && !current;
+    @SuppressWarnings("JavadocReference")
+    private boolean isPermittedConfigurationForUsageChange(String usage, boolean current) {
+        return name.equals("apiElements") || name.equals("runtimeElements") && usage.equals("consumable") && !current;
+    }
 
-        return isInitializing || isDetachedConfiguration || isLegacyRole || isPermittedConfigurationChangeForKotlin;
+    /**
+     * Determine if this is a configuration that is permitted to redundantly activate usage, to support important 3rd party
+     * plugins such as Kotlin that do this.
+     * <p>
+     * This method is temporary, so the duplication of the configuration names defined in
+     * {@link JvmConstants}, which are not available to be referenced directly from here, is unfortunate, but not a showstopper.
+     *
+     * @return {@code true} if this is a configuration that is permitted to redundantly activate usage; {@code false} otherwise
+     */
+    @SuppressWarnings("JavadocReference")
+    private boolean isPermittedConfigurationForRedundantActivation() {
+        return name.equals("runtimeClasspath") || name.endsWith("testRuntimeClasspath") || name.endsWith("TestRuntimeClasspath");
     }
 
     @Override
@@ -1860,6 +1928,8 @@ since users cannot create non-legacy configurations and there is no current publ
             validateMutation(MutationType.USAGE);
             canBeConsumed = allowed;
             maybeWarnOnChangingUsage("consumable", allowed);
+        } else if (canBeConsumed && allowed) {
+            maybeWarnOnRedundantUsageActivation("consumable", "setCanBeConsumed(true)");
         }
     }
 
@@ -1874,6 +1944,8 @@ since users cannot create non-legacy configurations and there is no current publ
             validateMutation(MutationType.USAGE);
             canBeResolved = allowed;
             maybeWarnOnChangingUsage("resolvable", allowed);
+        } else if (canBeResolved && allowed) {
+            maybeWarnOnRedundantUsageActivation("resolvable", "setCanBeResolved(true)");
         }
     }
 
@@ -1888,6 +1960,8 @@ since users cannot create non-legacy configurations and there is no current publ
             validateMutation(MutationType.USAGE);
             canBeDeclaredAgainst = allowed;
             maybeWarnOnChangingUsage("declarable against", allowed);
+        } else if (canBeDeclaredAgainst && allowed) {
+            maybeWarnOnRedundantUsageActivation("declarable against", "setCanBeDeclaredAgainst(true)");
         }
     }
 
@@ -1959,57 +2033,6 @@ since users cannot create non-legacy configurations and there is no current publ
         this.consistentResolutionSource = null;
         this.consistentResolutionReason = null;
         return this;
-    }
-
-    /**
-     * Print a formatted representation of a Configuration
-     */
-    public String dump() {
-        StringBuilder reply = new StringBuilder();
-
-        reply.append("\nConfiguration:");
-        reply.append("  class='").append(this.getClass()).append("'");
-        reply.append("  name='").append(this.getName()).append("'");
-        reply.append("  hashcode='").append(this.hashCode()).append("'");
-
-        reply.append("\nLocal Dependencies:");
-        if (getDependencies().size() > 0) {
-            for (Dependency d : getDependencies()) {
-                reply.append("\n   ").append(d);
-            }
-        } else {
-            reply.append("\n   none");
-        }
-
-        reply.append("\nLocal Artifacts:");
-        if (getArtifacts().size() > 0) {
-            for (PublishArtifact a : getArtifacts()) {
-                reply.append("\n   ").append(a);
-            }
-        } else {
-            reply.append("\n   none");
-        }
-
-        reply.append("\nAll Dependencies:");
-        if (getAllDependencies().size() > 0) {
-            for (Dependency d : getAllDependencies()) {
-                reply.append("\n   ").append(d);
-            }
-        } else {
-            reply.append("\n   none");
-        }
-
-
-        reply.append("\nAll Artifacts:");
-        if (getAllArtifacts().size() > 0) {
-            for (PublishArtifact a : getAllArtifacts()) {
-                reply.append("\n   ").append(a);
-            }
-        } else {
-            reply.append("\n   none");
-        }
-
-        return reply.toString();
     }
 
     private abstract static class ResolveState {
@@ -2436,5 +2459,60 @@ since users cannot create non-legacy configurations and there is no current publ
         public Optional<? extends RuntimeException> mapFailure(String type, Collection<Throwable> failures) {
             return DefaultConfiguration.this.mapFailure(type, failures);
         }
+    }
+
+    /**
+     * A custom configuration role that is used to copy a configuration.
+     *
+     * We allow copied configurations to assume any role. However, any roles which were previously disabled will become
+     * deprecated in the copied configuration.
+     *
+     * See the notes on {@link DefaultConfiguration#createCopy(Set, Set)}.
+     */
+    private final static class CopiedConfigurationRole implements ConfigurationRole {
+        private final boolean deprecateConsumption;
+        private final boolean deprecateResolution;
+        private final boolean deprecateDeclarationAgainst;
+
+        public CopiedConfigurationRole(boolean deprecateConsumption, boolean deprecateResolution, boolean deprecateDeclarationAgainst) {
+            this.deprecateConsumption = deprecateConsumption;
+            this.deprecateResolution = deprecateResolution;
+            this.deprecateDeclarationAgainst = deprecateDeclarationAgainst;
+        }
+
+        @Override
+        public String getName() {
+            return "adjusted current usage with deprecations";
+        }
+
+        @Override
+        public boolean isConsumable() {
+            return true;
+        }
+
+        @Override
+        public boolean isResolvable() {
+            return true;
+        }
+
+        @Override
+        public boolean isDeclarableAgainst() {
+            return true;
+        }
+
+        @Override
+        public boolean isConsumptionDeprecated() {
+            return deprecateConsumption;
+        }
+
+        @Override
+        public boolean isResolutionDeprecated() {
+            return deprecateResolution;
+        }
+
+        @Override
+        public boolean isDeclarationAgainstDeprecated() {
+            return deprecateDeclarationAgainst;
+            }
     }
 }

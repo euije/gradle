@@ -32,12 +32,14 @@ import org.gradle.tooling.ProjectConnection
 import org.gradle.tooling.model.GradleProject
 import org.gradle.util.GradleVersion
 import org.junit.Assume
+import spock.lang.IgnoreIf
 import spock.lang.Issue
 
 import java.time.ZoneOffset
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 
+import static org.gradle.integtests.fixtures.executer.GradleContextualExecuter.isEmbedded
 import static org.gradle.integtests.tooling.fixture.ToolingApiTestCommon.LOG_LEVEL_TEST_SCRIPT
 import static org.gradle.integtests.tooling.fixture.ToolingApiTestCommon.runLogScript
 import static org.gradle.integtests.tooling.fixture.ToolingApiTestCommon.validateLogs
@@ -135,6 +137,7 @@ class ToolingApiIntegrationTest extends AbstractIntegrationSpec {
                 assert gradle.gradleVersion == '${otherVersion.version.version}'
             }
         }"""
+        otherVersion.binDistribution.makeReadable()
         executer.withTasks('wrapper').run()
 
         when:
@@ -156,6 +159,7 @@ class ToolingApiIntegrationTest extends AbstractIntegrationSpec {
         }
         """
         projectDir.file('child').createDir()
+        otherVersion.binDistribution.makeReadable()
         executer.withTasks('wrapper').run()
 
         when:
@@ -170,7 +174,9 @@ class ToolingApiIntegrationTest extends AbstractIntegrationSpec {
         notThrown(Throwable)
     }
 
+    @IgnoreIf({ isEmbedded() })
     def "can specify a gradle installation to use"() {
+
         buildFile << "assert gradle.gradleVersion == '${otherVersion.version.version}'"
 
         when:
@@ -183,6 +189,7 @@ class ToolingApiIntegrationTest extends AbstractIntegrationSpec {
         model != null
     }
 
+    @IgnoreIf({ isEmbedded() })
     def "can specify a gradle distribution to use"() {
         buildFile << "assert gradle.gradleVersion == '${otherVersion.version.version}'"
 
@@ -196,6 +203,7 @@ class ToolingApiIntegrationTest extends AbstractIntegrationSpec {
         model != null
     }
 
+    @IgnoreIf({ isEmbedded() })
     def "can specify a gradle version to use"() {
         buildFile << "assert gradle.gradleVersion == '${otherVersion.version.version}'"
 

@@ -16,7 +16,6 @@
 
 package org.gradle.smoketests
 
-import org.gradle.integtests.fixtures.ToBeFixedForConfigurationCache
 import org.gradle.test.precondition.Requires
 import org.gradle.test.preconditions.UnitTestPreconditions
 import spock.lang.Issue
@@ -25,7 +24,6 @@ class FreefairAspectJPluginSmokeTest extends AbstractPluginValidatingSmokeTest {
     // AspectJ does not support JDK17 yet
     @Requires(UnitTestPreconditions.Jdk16OrEarlier)
     @Issue('https://plugins.gradle.org/plugin/io.freefair.aspectj')
-    @ToBeFixedForConfigurationCache(because = "Task.getProject() during execution")
     def 'freefair aspectj plugin'() {
         given:
         buildFile << """

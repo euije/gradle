@@ -371,7 +371,7 @@ Options
 ${builtInOptions}
 
 Description
-     Assembles a jar archive containing the main classes.
+     Assembles a jar archive containing the classes of the 'main' feature.
 
 Group
      build
@@ -394,7 +394,7 @@ Options
 ${builtInOptions}
 
 Description
-     Assembles a jar archive containing the main classes.
+     Assembles a jar archive containing the classes of the 'main' feature.
 
 Group
      build
@@ -527,6 +527,7 @@ BUILD SUCCESSFUL"""
             "Run with --stacktrace option to get the stack trace.",
             "Run with --info or --debug option to get more log output.",
             "Run with --scan to get full insights.",
+            "Get more help at https://help.gradle.org",
         )
     }
 

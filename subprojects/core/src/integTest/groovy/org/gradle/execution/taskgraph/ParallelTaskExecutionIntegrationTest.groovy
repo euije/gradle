@@ -647,11 +647,11 @@ class ParallelTaskExecutionIntegrationTest extends AbstractIntegrationSpec imple
             }
             subprojects {
                 configurations.create("myconfig1") {
-                    canBeResolved = true
+                    assert canBeResolved
                     canBeConsumed = false
                 }
                 configurations.create("myconfig2") {
-                    canBeResolved = true
+                    assert canBeResolved
                     canBeConsumed = false
                 }
 

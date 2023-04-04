@@ -16,9 +16,10 @@
 
 package org.gradle.api.tasks
 
-import org.apache.commons.io.FileUtils
+
 import org.gradle.integtests.fixtures.AbstractIntegrationSpec
 import org.gradle.integtests.fixtures.DirectoryBuildCacheFixture
+import org.gradle.integtests.fixtures.TestBuildCache
 import org.gradle.integtests.fixtures.executer.GradleContextualExecuter
 import org.gradle.internal.reflect.validation.ValidationMessageChecker
 import org.gradle.test.fixtures.file.TestFile
@@ -45,12 +46,11 @@ class CachedCustomTaskExecutionIntegrationTest extends AbstractIntegrationSpec i
 
             class MyTask extends DefaultTask {}
         """
-        assert listCacheFiles().size() == 0
+
         when:
         withBuildCache().run "help"
         then:
         result.assertTaskNotSkipped(":buildSrc:compileGroovy")
-        listCacheFiles().size() == 1 // compileGroovy
 
         expect:
         file("buildSrc/build").assertIsDir().deleteDir()
@@ -593,8 +593,8 @@ class CachedCustomTaskExecutionIntegrationTest extends AbstractIntegrationSpec i
         withBuildCache().fails "customTask"
         then:
         def expectedMessage = message.replace("PATH", file("build/output").path)
-        failureHasCause(~/Failed to store cache entry $CACHE_KEY_PATTERN for task ':customTask': Could not pack tree 'output': ${escapeString(expectedMessage)}/)
-        errorOutput.contains "Could not pack tree 'output': $expectedMessage"
+        failureHasCause(~/Failed to store cache entry $CACHE_KEY_PATTERN for task ':customTask': .*${escapeString(expectedMessage)}/)
+        errorOutput.contains expectedMessage
 
         where:
         expected | actual | message
@@ -632,9 +632,11 @@ class CachedCustomTaskExecutionIntegrationTest extends AbstractIntegrationSpec i
         cleanBuildDir()
         withBuildCache().run "producer"
 
-        // Store to local cache again
+        // Store to a different local cache
+        def alternativeLocalCache = new TestBuildCache(file("cache-dir-2").createDir())
+        settingsFile << alternativeLocalCache.localCacheConfiguration()
+
         when:
-        cleanLocalBuildCache()
         withBuildCache().run "producer", "--info", "--rerun-tasks"
         then:
         !output.contains("Caching disabled for task ':producer'")
@@ -841,7 +843,6 @@ class CachedCustomTaskExecutionIntegrationTest extends AbstractIntegrationSpec i
             |  Caching has been disabled to ensure correctness. Please consult deprecation warnings for more details.
         """.stripMargin())
         executedAndNotSkipped(":invalid")
-        listCacheFiles().isEmpty()
     }
 
     private static String defineCachedTask(String suffix = "") {
@@ -937,13 +938,6 @@ class CachedCustomTaskExecutionIntegrationTest extends AbstractIntegrationSpec i
 
     private TestFile cleanBuildDir() {
         file("build").assertIsDir().deleteDir()
-    }
-
-    private void cleanLocalBuildCache() {
-        listCacheFiles().each { file ->
-            println "Deleting cache entry: $file"
-            FileUtils.forceDelete(file)
-        }
     }
 
     void taskIsNotCached(String task) {

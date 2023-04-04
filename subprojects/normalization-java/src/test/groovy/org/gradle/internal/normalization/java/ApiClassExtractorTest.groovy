@@ -276,6 +276,7 @@ class ApiClassExtractorTest extends ApiClassExtractorTestSupport {
 
     void "target binary compatibility is maintained"() {
         Assume.assumeFalse(target == "1.6" && TestPrecondition.doSatisfies(UnitTestPreconditions.Jdk6OrLater))
+        Assume.assumeFalse(target == "1.7" && TestPrecondition.doSatisfies(UnitTestPreconditions.Jdk7OrLater))
 
         given:
         def api = toApi(target, [A: 'public class A {}'])

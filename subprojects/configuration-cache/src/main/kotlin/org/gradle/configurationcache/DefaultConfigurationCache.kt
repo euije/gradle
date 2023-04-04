@@ -63,6 +63,7 @@ class DefaultConfigurationCache internal constructor(
     private val virtualFileSystem: BuildLifecycleAwareVirtualFileSystem,
     private val buildOperationExecutor: BuildOperationExecutor,
     private val cacheFingerprintController: ConfigurationCacheFingerprintController,
+    private val encryptionService: EncryptionService,
     /**
      * Force the [FileSystemAccess] service to be initialized as it initializes important static state.
      */
@@ -218,15 +219,6 @@ class DefaultConfigurationCache internal constructor(
                 "{} as configuration cache cannot be reused due to {}",
                 buildActionModelRequirements.actionDisplayName.capitalizedDisplayName,
                 "--update-locks"
-            )
-            ConfigurationCacheAction.STORE
-        }
-
-        startParameter.isWriteDependencyVerifications -> {
-            logBootstrapSummary(
-                "{} as configuration cache cannot be reused due to {}",
-                buildActionModelRequirements.actionDisplayName.capitalizedDisplayName,
-                "--write-verification-metadata"
             )
             ConfigurationCacheAction.STORE
         }
@@ -419,7 +411,7 @@ class DefaultConfigurationCache internal constructor(
     private
     fun startCollectingCacheFingerprint() {
         cacheFingerprintController.maybeStartCollectingFingerprint(store.assignSpoolFile(StateType.BuildFingerprint), store.assignSpoolFile(StateType.ProjectFingerprint)) {
-            cacheFingerprintWriterContextFor(it)
+            cacheFingerprintWriterContextFor(encryptionService.outputStream(it.stateType, it.file::outputStream))
         }
     }
 
@@ -488,7 +480,7 @@ class DefaultConfigurationCache internal constructor(
 
     private
     fun <T> readFingerprintFile(fingerprintFile: ConfigurationCacheStateFile, action: suspend ReadContext.(ConfigurationCacheFingerprintController.Host) -> T): T =
-        fingerprintFile.inputStream().use { inputStream ->
+        encryptionService.inputStream(fingerprintFile.stateType, fingerprintFile::inputStream).use { inputStream ->
             cacheIO.withReadContextFor(inputStream) { codecs ->
                 withIsolate(IsolateOwner.OwnerHost(host), codecs.fingerprintTypesCodec()) {
                     action(object : ConfigurationCacheFingerprintController.Host {
@@ -508,7 +500,7 @@ class DefaultConfigurationCache internal constructor(
 
     private
     fun loadGradleProperties() {
-        gradlePropertiesController.loadGradlePropertiesFrom(startParameter.settingsDirectory)
+        gradlePropertiesController.loadGradlePropertiesFrom(startParameter.settingsDirectory, true)
     }
 
     private
@@ -528,10 +520,7 @@ class DefaultConfigurationCache internal constructor(
 
     private
     val configurationCacheLogLevel: LogLevel
-        get() = when (startParameter.isQuiet) {
-            true -> LogLevel.INFO
-            else -> LogLevel.LIFECYCLE
-        }
+        get() = startParameter.configurationCacheLogLevel
 }
 
 

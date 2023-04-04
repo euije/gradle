@@ -35,8 +35,188 @@ The previous step will help you identify potential problems by issuing deprecati
 . Run `gradle wrapper --gradle-version {gradleVersion}` to update the project to {gradleVersion}.
 . Try to run the project and debug any errors using the <<troubleshooting.adoc#troubleshooting, Troubleshooting Guide>>.
 
+[[changes_8.2]]
+== Upgrading from 8.1 and earlier
+
+=== Deprecations
+
+[[compile_options_generated_sources_directory]]
+==== `link:{javadocPath}/org/gradle/api/tasks/compile/CompileOptions.html[CompileOptions]` method deprecations
+
+The following methods on `CompileOptions` are deprecated:
+
+- `getAnnotationProcessorGeneratedSourcesDirectory()`
+- `setAnnotationProcessorGeneratedSourcesDirectory(File)`
+- `setAnnotationProcessorGeneratedSourcesDirectory(Provider<File>)`
+
+Current usages of these methods should migrate to `link:{javadocPath}/org/gradle/api/tasks/compile/CompileOptions.html#getGeneratedSourceOutputDirectory--[DirectoryProperty getGeneratedSourceOutputDirectory()]`
+
+[[deprecated_access_to_conventions]]
+==== Deprecated access to plugin conventions
+
+The concept of conventions is outdated and superseded by <<implementing_gradle_plugins.adoc#modeling_dsl_like_apis, extensions>> to provide custom DSLs.
+
+To reflect this in the Gradle API, the following elements are deprecated:
+
+- link:{javadocPath}/org/gradle/api/Project.html#getConvention--[org.gradle.api.Project.getConvention()]
+- link:{javadocPath}/org/gradle/api/plugins/Convention.html[org.gradle.api.plugins.Convention]
+- `org.gradle.api.internal.HasConvention`
+
+Gradle Core plugins still register their conventions in addition to their extensions for backwards compatibility.
+
+It is deprecated to access any of these conventions and their properties.
+Doing so will now emit a deprecation warning.
+This will become an error in Gradle 9.0.
+You should prefer accessing the extensions and their properties instead.
+
+For example the following code will now emit deprecation warnings:
+
+====
+[.multi-language-sample]
+=====
+.build.gradle.kts
+[source,kotlin]
+----
+plugins {
+    id("java")
+}
+
+configure<JavaPluginConvention> { // Accessing a convention
+    sourceCompatibility = JavaVersion.VERSION_18
+}
+----
+=====
+[.multi-language-sample]
+=====
+.build.gradle
+[source,groovy]
+----
+plugins {
+    id 'java'
+}
+
+sourceCompatibility = 18 // Accessing a convention
+----
+=====
+====
+
+This should be changed to use the `java` plugin's extension instead:
+
+====
+[.multi-language-sample]
+=====
+.build.gradle.kts
+[source,kotlin]
+----
+plugins {
+    id("java")
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_18
+}
+----
+=====
+[.multi-language-sample]
+=====
+.build.gradle
+[source,groovy]
+----
+plugins {
+    id 'java'
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_18
+}
+----
+=====
+====
+
+Prominent community plugins already migrated to using extensions to provide custom DSLs.
+Some of them still registers conventions for backwards compatibility.
+Registering conventions does not emit a deprecation warning yet to provide a migration window.
+Future Gradle versions will do.
+
+[[redundant_configuration_usage_activation]]
+==== Redundant configuration usage activation
+
+Calling `setCanBeConsumed(boolean)` or `setCanBeResolved(boolean)` on a configuration that already allows that usage is deprecated.
+
+This deprecation is intended to help users identify unnecessary configuration usage modifications.
+
+[[deprecated_configuration_get_all]]
+==== `link:{javadocPath}/org/gradle/api/artifacts/Configuration.html[Configuration]` method deprecations
+
+The following method on `Configuration` is deprecated for removal:
+
+- `getAll()`
+
+Obtain the set of all configurations from the project's `configurations` container instead.
+
 [[changes_8.1]]
 == Upgrading from 8.0 and earlier
+
+[[cache_marking]]
+=== CACHEDIR.TAG files are created in global cache directories
+Gradle now emits a `CACHEDIR.TAG` file in some global cache directories, as specified in <<directory_layout#dir:gradle_user_home:cache_marking>>.
+
+This may cause these directories to no longer be searched or backed up by some tools. To disable it, use the following code in an <<init_scripts#sec:using_an_init_script,init script>> in the Gradle user home directory:
+
+====
+[.multi-language-sample]
+=====
+.init.gradle.kts
+[source,kotlin]
+----
+beforeSettings {
+    caches {
+        // Disable cache marking for all caches
+        markingStrategy.set(MarkingStrategy.NONE)
+    }
+}
+----
+=====
+[.multi-language-sample]
+=====
+.init.gradle
+[source,groovy]
+----
+beforeSettings { settings ->
+    settings.caches {
+        // Disable cache marking for all caches
+        markingStrategy = MarkingStrategy.NONE
+    }
+}
+----
+=====
+====
+
+[[configuration_caching_options_renamed]]
+=== Configuration cache options renamed
+
+In this release, the configuration cache feature was promoted from incubating to stable, and as such, all properties
+originally mentioned in the feature documentation (which had an `unsafe` part in their names, e.g. `org.gradle.unsafe.configuration-cache`)
+were renamed, in some cases, by just removing the `unsafe` bit.
+
+[cols="1,1", options="header"]
+|===
+
+| Incubating property
+| Finalized property
+
+|`org.gradle.unsafe.configuration-cache`
+|`org.gradle.configuration-cache`
+
+|`org.gradle.unsafe.configuration-cache-problems`
+|`org.gradle.configuration-cache.problems`*
+
+|`org.gradle.unsafe.configuration-cache.max-problems`
+|`org.gradle.configuration-cache.max-problems`
+|===
+
+Note that the original `org.gradle.unsafe.configuration-cache...` properties continue to be honored in this release,
+and no warnings will be produced if they are used, but they will be deprecated and removed in a future release.
 
 === Potential breaking changes
 
@@ -46,6 +226,25 @@ Compilation warnings from Kotlin DSL scripts are printed to the console output.
 For example, the use of deprecated APIs in Kotlin DSL will emit warnings each time the script is compiled.
 
 This is a potentially breaking change if you are consuming the console output of Gradle builds.
+
+==== New API introduced may clash with existing Gradle DSL code
+
+When a new property or method is added to an existing type in the Gradle DSL, it may clash with names already in use in user code.
+
+When a name clash occurs, one solution is to rename the element in user code.
+
+This is a non-exhaustive list of API additions in 8.1 that may cause name collisions with existing user code.
+
+* link:{javadocPath}/org/gradle/api/tasks/JavaExec.html#getJvmArguments--[`JavaExec.getJvmArguments()`]
+* link:{javadocPath}/org/gradle/process/JavaExecSpec.html#getJvmArguments--[`JavaExecSpec.getJvmArguments()`]
+
+==== Using unsupported API to start external processes at configuration time is no longer allowed with the configuration cache enabled
+
+Since Gradle 7.5, using `Project.exec`, `Project.javaexec`, and standard Java and Groovy APIs to run external processes at configuration time has been considered an error only if the <<configuration_cache.adoc#config_cache:stable,feature preview `STABLE_CONFIGURATION_CACHE`>> was enabled.
+With the configuration cache promotion to a stable feature in Gradle 8.1, this error is detected regardless of the feature preview status.
+The <<configuration_cache#config_cache:requirements:external_processes,configuration cache chapter>> has more details to help with the migration to the new provider-based APIs to execute external processes at configuration time.
+
+Builds that do not use the configuration cache, or only start external processes at execution time are not affected by this change.
 
 === Deprecations
 
@@ -69,6 +268,13 @@ using select popular third-party plugins.
 This change is part of a larger ongoing effort to make the intended behavior of configurations more consistent and predictable, and to unlock further speed and memory improvements in this area of Gradle.
 
 The ability to change the allowed usage of a configuration after creation will be removed in Gradle 9.0.
+
+[[reserved_configuration_names]]
+==== Reserved configuration names
+
+Configuration names "detachedConfiguration" and "detachedConfigurationX" (where X is any integer) are reserved for internal use when creating detached configurations.
+
+The ability to create non-detached configurations with these names will be removed in Gradle 9.0.
 
 [[java_extension_without_java_component]]
 ==== Calling select methods on the `JavaPluginExtension` without the `java` component present
@@ -278,7 +484,6 @@ so you can also apply it to your project and it will fix the warning.
 
 These members will be removed in Gradle 9.0.
 
-* `VersionNumber`
 * `WrapUtil.toDomainObjectSet(...)`
 * `GUtil.toCamelCase(...)`
 * `GUtil.toLowerCase(...)`
@@ -371,6 +576,15 @@ beforeSettings {
 Using relative file paths to point to Java executables is now deprecated and will become an error in Gradle 9.
 This is done to reduce confusion about what such relative paths should resolve against.
 
+[[task_convention]]
+==== Calling `Task.getConvention()`, `Task.getExtensions()` from a task action
+
+Calling link:{javadocPath}/org/gradle/api/Task.html#getConvention--[Task.getConvention()], link:{javadocPath}/org/gradle/api/Task.html#getExtensions--[Task.getExtensions()] from a task action at
+execution time is now deprecated and will be made an error in Gradle 9.0.
+
+See the <<configuration_cache#config_cache:requirements:disallowed_types,configuration cache chapter>> for details on
+how to migrate these usages to APIs that are supported by the configuration cache.
+
 === Changes in the IDE integration
 
 [[kotlin_dsl_plugins_catalogs_workaround]]
@@ -385,4 +599,3 @@ If you were using the link:https://plugins.jetbrains.com/plugin/18949-gradle-lib
 After upgrading Gradle to 8.1 you will need to clear the IDE caches and restart.
 
 Also see <<upgrading_version_8.adoc#kotlin_dsl_deprecated_catalogs_plugins_block, the deprecated usages of version catalogs in the Kotlin DSL `plugins {}` block>> above.
-
