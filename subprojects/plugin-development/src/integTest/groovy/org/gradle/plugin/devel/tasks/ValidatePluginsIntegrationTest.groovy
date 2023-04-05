@@ -856,6 +856,42 @@ class ValidatePluginsIntegrationTest extends AbstractPluginValidationIntegration
         ])
     }
 
+    @Issue("https://github.com/gradle/gradle/issues/23049")
+    @ValidationTestFor(
+        ValidationProblemId.NESTED_TYPE_UNSUITED
+    )
+    def "validation fails for unsuited nested types"() {
+        javaTaskSource << """
+            import org.gradle.api.*;
+            import org.gradle.api.tasks.*;
+            import org.gradle.work.*;
+            import java.util.*;
+
+            @DisableCachingByDefault(because = "test task")
+            public class MyTask extends DefaultTask {
+                @Nested
+                public ${type} getSome${type}() {
+                    return ${producer};
+                }
+
+                @TaskAction
+                public void doStuff() { }
+            }
+        """
+
+        expect:
+        assertValidationFailsWith([
+            warning(nestedTypeUnsuited { type("MyTask").property("some${type}").annotatedType(className) },
+                'validation_problems', 'nested_type_unsuited'),
+        ])
+
+        where:
+        type         | producer                   | className
+        'Integer'    | 'Integer.valueOf(1)'       | 'java.lang.Integer'
+        'String'     | 'new String()'             | 'java.lang.String'
+        'File'       | 'new File("some/path")'    | 'java.io.File'
+    }
+
     def "honors configured Java Toolchain to avoid compiled by a more recent version failure"() {
         def currentJdk = Jvm.current()
         def newerJdk = AvailableJavaHomes.getDifferentVersion { it.languageVersion > currentJdk.javaVersion }

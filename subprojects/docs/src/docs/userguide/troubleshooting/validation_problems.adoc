@@ -398,3 +398,12 @@ Gradle uses the key to generate a name for the (sub)property.
 Only allowing keys of type String guarantees that these names are unique and well-formed, and is preferable to relying on `toString()` for producing such names.
 
 To fix this problem, change the type of the key to String.
+
+[[nested_type_unsuited]]
+== Type is unsuited for nested annotation
+
+This error indicates that an unsuited type is annotated as nested.
+The nested annotation marks a property as specifying a nested bean, whose properties should be checked for annotations.
+Primitive wrapper types and other types like String and File do not represent a nested bean, which makes them unsuited for the annotation.
+
+To fix this problem, change to a suited type, e.g. `Provider<T>`, `Iterable<T>` or <MapProperty<K, V>>.

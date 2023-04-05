@@ -435,6 +435,17 @@ trait ValidationMessageChecker {
             .render()
     }
 
+    @ValidationTestFor(
+        ValidationProblemId.NESTED_TYPE_UNSUITED
+    )
+    String nestedTypeUnsuited(@DelegatesTo(value = NestedTypeUnsuited, strategy = Closure.DELEGATE_FIRST) Closure<?> spec) {
+        def config = display(NestedTypeUnsuited, "nested_type_unsuited", spec)
+        config.description("where type of '${config.annotatedType}' is unsuited for nested annotation.")
+            .reason("Primitive wrapper types and others are unsuited for nested annotation.")
+            .solution("Change to a suited type, e.g. 'Provider<T>', 'Iterable<T>' or '<MapProperty<K, V>>'")
+            .render()
+    }
+
     void expectThatExecutionOptimizationDisabledWarningIsDisplayed(GradleExecuter executer,
                                                                    String message,
                                                                    String docId = "incremental_build",
@@ -973,6 +984,20 @@ trait ValidationMessageChecker {
 
         NestedMapUnsupportedKeyType keyType(String keyType) {
             this.keyType = keyType
+            this
+        }
+    }
+
+    static class NestedTypeUnsuited extends ValidationMessageDisplayConfiguration<NestedTypeUnsuited> {
+
+        String annotatedType
+
+        NestedTypeUnsuited(ValidationMessageChecker checker) {
+            super(checker)
+        }
+
+        NestedTypeUnsuited annotatedType(String annotatedType) {
+            this.annotatedType = annotatedType
             this
         }
     }

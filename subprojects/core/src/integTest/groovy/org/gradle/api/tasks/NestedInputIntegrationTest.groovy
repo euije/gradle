@@ -823,6 +823,41 @@ class NestedInputIntegrationTest extends AbstractIntegrationSpec implements Dire
         file("output.txt").text == "[100:example][100:example]"
     }
 
+    @Issue("https://github.com/gradle/gradle/issues/23049")
+    @ValidationTestFor(ValidationProblemId.NESTED_TYPE_UNSUITED)
+    def "validation fails for unsuited nested types"() {
+        buildFile << """
+            abstract class CustomTask extends DefaultTask {
+                @Nested
+                ${type} getSome${type}() {
+                    return ${producer}
+                }
+
+                @TaskAction
+                void execute() { }
+            }
+
+            tasks.register("customTask", CustomTask) { }
+        """
+
+        when:
+        expectThatExecutionOptimizationDisabledWarningIsDisplayed(executer,
+            "Type 'CustomTask' property 'some${type}' where type of '${className}' is unsuited for nested annotation. " +
+                "Reason: Primitive wrapper types and others are unsuited for nested annotation.",
+            'validation_problems',
+            'nested_type_unsuited')
+        run("customTask")
+
+        then:
+        executedAndNotSkipped(":customTask")
+
+        where:
+        type         | producer                   | className
+        'Integer'    | 'Integer.valueOf(1)'       | 'java.lang.Integer'
+        'String'     | 'new String()'             | 'java.lang.String'
+        'File'       | 'new File("some/path")'    | 'java.io.File'
+    }
+
     private static String namedBeanClass() {
         """
             class NamedBean implements Named {
