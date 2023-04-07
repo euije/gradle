@@ -102,10 +102,12 @@ org.gradle.kotlin.dsl.allWarningsAsErrors=true
 
 More details can be found in the dedicated section of the [Kotlin DSL](userguide/kotlin_dsl.html#sec:compilation_warnings) user manual chapter.
 
-### Dependency verification keys stripping
+### Dependency verification keys
 
 PGP keys for dependency verification downloaded from key servers are now stripped to contain only necessary data.
 This feature can significantly reduce keyrings size.
+
+Keys metadata is sorted by key id and is deduplicated to ensure consistent ordering of keys in the generated keyring and to help store it in version control systems.
 
 <!-- ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 ADD RELEASE FEATURES ABOVE
