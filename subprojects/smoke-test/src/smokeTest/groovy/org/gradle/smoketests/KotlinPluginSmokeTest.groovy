@@ -299,6 +299,7 @@ class KotlinPluginSmokeTest extends AbstractPluginValidatingSmokeTest implements
                 expectProjectConventionDeprecation(kotlinVersion)
                 expectConventionTypeDeprecation(kotlinVersion)
             }
+            expectConfigureUtilDeprecation(kotlinVersion)
         }
 
         def result = testRunner.build()
@@ -510,6 +511,18 @@ class KotlinPluginSmokeTest extends AbstractPluginValidatingSmokeTest implements
             runner.expectDeprecationWarningIf(
                 agpVersionNumber < VersionNumber.parse("7.4.0") || (agpVersionNumber >= VersionNumber.parse("7.4.0") && kotlinVersionNumber < VersionNumber.parse("1.7.22")),
                 CONVENTION_TYPE_DEPRECATION,
+                ""
+            )
+        }
+
+        void expectConfigureUtilDeprecation(String version) {
+            VersionNumber versionNumber = VersionNumber.parse(version)
+            runner.expectDeprecationWarningIf(
+                versionNumber < VersionNumber.parse("1.7.22"),
+                "The org.gradle.util.ConfigureUtil type has been deprecated. " +
+                    "This is scheduled to be removed in Gradle 9.0. " +
+                    "Consult the upgrading guide for further information: " +
+                    "https://docs.gradle.org/${GradleVersion.current().version}/userguide/upgrading_version_8.html#org_gradle_util_reports_deprecations",
                 ""
             )
         }

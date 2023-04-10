@@ -19,12 +19,12 @@ package org.gradle.util;
 import groovy.lang.Closure;
 import org.codehaus.groovy.runtime.GeneratedClosure;
 import org.gradle.api.Action;
-import org.gradle.internal.deprecation.DeprecationLogger;
-import org.gradle.internal.metaobject.DynamicObjectUtil;
 import org.gradle.internal.Actions;
+import org.gradle.internal.deprecation.DeprecationLogger;
 import org.gradle.internal.metaobject.ConfigureDelegate;
 import org.gradle.internal.metaobject.DynamicInvokeResult;
 import org.gradle.internal.metaobject.DynamicObject;
+import org.gradle.internal.metaobject.DynamicObjectUtil;
 import org.gradle.util.internal.ClosureBackedAction;
 
 import javax.annotation.Nullable;
@@ -145,7 +145,7 @@ public class ConfigureUtil {
      * @return The delegate param
      */
     public static <T> T configure(@Nullable Closure configureClosure, T target) {
-        // TODO log deprecation once the shadow plugin is fixed
+        logDeprecation(8);
         if (configureClosure == null) {
             return target;
         }
