@@ -18,6 +18,7 @@ package org.gradle.smoketests
 
 
 import org.gradle.internal.reflect.validation.ValidationMessageChecker
+import org.gradle.util.GradleVersion
 import spock.lang.Issue
 
 import static org.gradle.testkit.runner.TaskOutcome.SUCCESS
@@ -35,15 +36,19 @@ class SpringBootPluginSmokeTest extends AbstractPluginValidatingSmokeTest implem
 
             ${mavenCentralRepository()}
 
-            project.setProperty('applicationDefaultJvmArgs', ['-DFOO=42'])
+            application {
+                applicationDefaultJvmArgs = ['-DFOO=42']
+            }
 
             dependencies {
                 implementation 'org.springframework.boot:spring-boot-starter'
-                testImplementation 'org.springframework.boot:spring-boot-starter-test'
             }
 
-            tasks.named('test') {
-                useJUnitPlatform()
+            testing.suites.test {
+                useJUnitJupiter()
+                dependencies {
+                    implementation 'org.springframework.boot:spring-boot-starter-test'
+                }
             }
         """.stripIndent()
 
@@ -76,14 +81,24 @@ class SpringBootPluginSmokeTest extends AbstractPluginValidatingSmokeTest implem
         """
 
         when:
-        def buildResult = runner('assembleBootDist', 'check').build()
+        def smokeTestRunner = runner('assembleBootDist', 'check')
+        // verified manually: the 3.0.2 version of Spring Boot plugin removed the deprecated API usage
+        smokeTestRunner.expectLegacyDeprecationWarning(BaseDeprecations.PROJECT_CONVENTION_DEPRECATION)
+        smokeTestRunner.expectLegacyDeprecationWarning(BaseDeprecations.CONVENTION_TYPE_DEPRECATION)
+        def buildResult = smokeTestRunner.build()
 
         then:
         buildResult.task(':assembleBootDist').outcome == SUCCESS
         buildResult.task(':check').outcome == SUCCESS
 
         when:
-        def runResult = runner('bootRun').build()
+        smokeTestRunner = runner('bootRun')
+        smokeTestRunner.expectLegacyDeprecationWarning(BaseDeprecations.PROJECT_CONVENTION_DEPRECATION)
+        smokeTestRunner.expectLegacyDeprecationWarning(BaseDeprecations.CONVENTION_TYPE_DEPRECATION)
+        def runResult = smokeTestRunner.expectDeprecationWarning(
+                "The org.gradle.api.plugins.ApplicationPluginConvention type has been deprecated. This is scheduled to be removed in Gradle 9.0. Consult the upgrading guide for further information: https://docs.gradle.org/${GradleVersion.current().version}/userguide/upgrading_version_8.html#application_convention_deprecation",
+                "No need to follow up as the 2.7.x branch already removed the convention usage")
+            .build()
 
         then:
         runResult.task(':bootRun').outcome == SUCCESS

@@ -60,7 +60,9 @@ class GrettySmokeTest extends AbstractPluginValidatingSmokeTest {
         """
 
         when:
-        def result = runner('checkContainerUp').build()
+        def result = runner('checkContainerUp')
+            .expectLegacyDeprecationWarning(BaseDeprecations.CONVENTION_TYPE_DEPRECATION)
+            .build()
 
         then:
         result.task(':checkContainerUp').outcome == SUCCESS

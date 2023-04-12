@@ -23,20 +23,18 @@ import org.gradle.api.artifacts.PublishArtifact;
 import org.gradle.api.artifacts.ResolveException;
 import org.gradle.api.capabilities.Capability;
 import org.gradle.api.internal.artifacts.ResolveContext;
-import org.gradle.api.internal.artifacts.transform.ExtraExecutionGraphDependenciesResolverFactory;
 import org.gradle.api.internal.attributes.AttributeContainerInternal;
 import org.gradle.api.internal.attributes.ImmutableAttributes;
 import org.gradle.internal.DisplayName;
 import org.gradle.internal.FinalizableValue;
 import org.gradle.internal.deprecation.DeprecatableConfiguration;
-import org.gradle.util.Path;
 
 import javax.annotation.Nullable;
 import java.util.Collection;
 import java.util.List;
 import java.util.Set;
 
-public interface ConfigurationInternal extends ResolveContext, DeprecatableConfiguration, DependencyMetaDataProvider, FinalizableValue, Configuration {
+public interface ConfigurationInternal extends ResolveContext, DeprecatableConfiguration, FinalizableValue, Configuration {
     enum InternalState {
         UNRESOLVED,
         BUILD_DEPENDENCIES_RESOLVED,
@@ -45,18 +43,7 @@ public interface ConfigurationInternal extends ResolveContext, DeprecatableConfi
     }
 
     @Override
-    ResolutionStrategyInternal getResolutionStrategy();
-
-    @Override
     AttributeContainerInternal getAttributes();
-
-    String getPath();
-
-    Path getIdentityPath();
-
-    void setReturnAllVariants(boolean returnAllVariants);
-
-    boolean getReturnAllVariants();
 
     /**
      * Runs any registered dependency actions for this Configuration, and any parent Configuration.
@@ -99,18 +86,10 @@ public interface ConfigurationInternal extends ResolveContext, DeprecatableConfi
     List<? extends GradleException> preventFromFurtherMutationLenient();
 
     /**
-     * Reports whether this configuration uses {@link org.gradle.api.Incubating Incubating} attributes types, such as {@link org.gradle.api.attributes.Category#VERIFICATION}.
-     * @return
-     */
-    boolean isIncubating();
-
-    /**
      * Gets the complete set of exclude rules including those contributed by
      * superconfigurations.
      */
     Set<ExcludeRule> getAllExcludeRules();
-
-    ExtraExecutionGraphDependenciesResolverFactory getDependenciesResolver();
 
     @Nullable
     ConfigurationInternal getConsistentResolutionSource();
